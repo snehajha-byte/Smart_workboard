@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart Workboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ===== Auth screen (shown when not logged in) ===== -->
+  <div id="auth-screen" class="overlay-screen">
+    <div class="auth-card">
+      <div class="brand" style="justify-content:center;border:none;margin:0 0 1.5rem;padding:0;">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg" style="color:var(--ochre)">
+          <rect x="1" y="1" width="24" height="24" rx="5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M7 8.5H19M7 13H15.5M7 17.5H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-name" style="color:var(--ink)">Workboard</span>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab-btn active" data-authtab="login">Log in</button>
+        <button class="auth-tab-btn" data-authtab="signup">Sign up</button>
+      </div>
+
+      <form id="login-form" class="auth-form active">
+        <input type="text" id="login-username" placeholder="Username" required />
+        <input type="password" id="login-password" placeholder="Password" required />
+        <button type="submit">Log in</button>
+        <p class="auth-error" id="login-error"></p>
+      </form>
+
+      <form id="signup-form" class="auth-form">
+        <input type="text" id="signup-name" placeholder="Your name" required />
+        <input type="text" id="signup-username" placeholder="Choose a username" required />
+        <input type="password" id="signup-password" placeholder="Choose a password" required />
+        <button type="submit">Create account</button>
+        <p class="auth-error" id="signup-error"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== Group screen (shown when logged in but no group selected) ===== -->
+  <div id="group-screen" class="overlay-screen" style="display:none">
+    <div class="auth-card">
+      <h2 style="margin-bottom:0.3rem">Your groups</h2>
+      <p class="tab-sub" style="margin-bottom:1.2rem">Everyone in a group shares the same notes, tasks and milestones.</p>
+
+      <ul id="my-groups-list" class="entry-list" style="margin-bottom:1.5rem"></ul>
+
+      <div class="auth-tabs">
+        <button class="auth-tab-btn active" data-grouptab="create">Create a group</button>
+        <button class="auth-tab-btn" data-grouptab="join">Join a group</button>
+      </div>
+
+      <form id="create-group-form" class="auth-form active">
+        <input type="text" id="create-group-name" placeholder="Group name (e.g. CS Project Team)" required />
+        <input type="password" id="create-group-password" placeholder="Set a group password" required />
+        <button type="submit">Create group</button>
+        <p class="auth-error" id="create-group-error"></p>
+      </form>
+
+      <form id="join-group-form" class="auth-form">
+        <input type="text" id="join-group-code" placeholder="Group code (e.g. WB-7F3K2)" required style="text-transform:uppercase" />
+        <input type="password" id="join-group-password" placeholder="Group password" required />
+        <button type="submit">Join group</button>
+        <p class="auth-error" id="join-group-error"></p>
+      </form>
+
+      <button id="logout-btn" class="ghost-btn" style="margin-top:1rem;width:100%">Log out</button>
+    </div>
+  </div>
+
+  <!-- ===== Main app ===== -->
+  <div class="app-shell" id="app-shell" style="display:none">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg class="brand-mark" width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="24" height="24" rx="5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M7 8.5H19M7 13H15.5M7 17.5H12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-name">Workboard</span>
+      </div>
+
+      <div class="group-indicator" id="group-indicator"></div>
+
+      <nav>
+        <button class="nav-btn active" data-tab="dashboard"><span class="nav-icon">◱</span> Overview</button>
+        <button class="nav-btn" data-tab="notes"><span class="nav-icon">✎</span> Notes</button>
+        <button class="nav-btn" data-tab="tasks"><span class="nav-icon">☐</span> Tasks</button>
+        <button class="nav-btn" data-tab="milestones"><span class="nav-icon">◆</span> Milestones</button>
+        <button class="nav-btn" data-tab="comments"><span class="nav-icon">✉</span> Comments</button>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="switch-group-btn" class="theme-btn">🔀 Switch group</button>
+        <button id="dark-toggle" class="theme-btn">🌙 Dark mode</button>
+        <div id="status-banner" class="status-banner"></div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="tab-content-wrap">
+      <!-- Dashboard: quick overview -->
+      <section id="dashboard" class="tab active">
+        <header class="tab-header">
+          <h1>Overview</h1>
+          <p class="tab-sub">A quick look at everything on your workboard.</p>
+        </header>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-number" id="stat-notes">0</span>
+            <span class="stat-label">Notes</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-number" id="stat-tasks-open">0</span>
+            <span class="stat-label">Open tasks</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-number" id="stat-milestones-due">0</span>
+            <span class="stat-label">Milestones due soon</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-number" id="stat-comments">0</span>
+            <span class="stat-label">Comments</span>
+          </div>
+        </div>
+        <div id="dashboard-next-up" class="next-up"></div>
+      </section>
+
+      <!-- Notes: offline-first note taking (core feature) -->
+      <section id="notes" class="tab">
+        <header class="tab-header">
+          <h1>Notes</h1>
+          <p class="tab-sub">Write anywhere. Syncs the moment you're back online. <span id="sync-indicator" class="small"></span></p>
+        </header>
+
+        <form id="note-form" class="composer">
+          <input type="text" id="note-title" placeholder="Give this note a title" />
+          <div class="format-toolbar">
+            <button type="button" class="fmt-btn" data-fmt="bold" title="Bold"><strong>B</strong></button>
+            <button type="button" class="fmt-btn" data-fmt="italic" title="Italic"><em>I</em></button>
+            <button type="button" class="fmt-btn" data-fmt="heading" title="Heading">H</button>
+            <button type="button" class="fmt-btn" data-fmt="bullet" title="Bullet list">• List</button>
+            <button type="button" class="fmt-btn" data-fmt="highlight" title="Highlight">◆ Mark</button>
+          </div>
+          <textarea id="note-text" placeholder="Start writing… works even without internet" rows="4" required></textarea>
+          <button type="submit">Save note</button>
+        </form>
+
+        <div class="notes-toolbar">
+          <input type="text" id="note-search" placeholder="Search your notes…" />
+          <button id="export-notes-btn" type="button" class="ghost-btn">Export all</button>
+        </div>
+        <p class="small hint-text">Tip: Ctrl+Enter saves a note instantly.</p>
+        <ul id="note-list" class="entry-list"></ul>
+      </section>
+
+      <!-- LF1: Task list -->
+      <section id="tasks" class="tab">
+        <header class="tab-header">
+          <h1>Tasks</h1>
+          <p class="tab-sub">Sorted by what's due first.</p>
+        </header>
+        <form id="task-form" class="composer composer-row">
+          <input type="text" id="task-title" placeholder="Task title" required />
+          <input type="date" id="task-due" required />
+          <select id="task-priority">
+            <option value="low">Low</option>
+            <option value="normal" selected>Normal</option>
+            <option value="high">High</option>
+          </select>
+          <button type="submit">Add task</button>
+        </form>
+        <ul id="task-list" class="entry-list"></ul>
+      </section>
+
+      <!-- LF2: Milestones -->
+      <section id="milestones" class="tab">
+        <header class="tab-header">
+          <h1>Milestones</h1>
+          <p class="tab-sub">Anything due within 48 hours gets flagged.</p>
+        </header>
+        <form id="milestone-form" class="composer composer-row">
+          <input type="text" id="milestone-title" placeholder="Milestone title" required />
+          <input type="date" id="milestone-due" required />
+          <button type="submit">Add milestone</button>
+        </form>
+        <ul id="milestone-list" class="entry-list"></ul>
+      </section>
+
+      <!-- LF3: Comments -->
+      <section id="comments" class="tab">
+        <header class="tab-header">
+          <h1>Comments</h1>
+          <p class="tab-sub">Leave feedback directly on a piece of work.</p>
+        </header>
+        <label class="field-label">Work item ID
+          <input type="number" id="workitem-id" value="1" min="1" />
+        </label>
+        <form id="comment-form" class="composer composer-row">
+          <input type="text" id="comment-author" placeholder="Your name" required />
+          <input type="text" id="comment-text" placeholder="Leave feedback..." required />
+          <button type="submit">Post</button>
+        </form>
+        <ul id="comment-list" class="entry-list"></ul>
+      </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
