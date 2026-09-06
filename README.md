@@ -7,16 +7,11 @@ A lightweight web app for prioritizing tasks, tracking project milestones, and l
 - **Frontend:** Plain HTML/CSS/JS (no build step required)
 - **API contract:** see `docs/api-contract.md`
 
-## Run locally (3 commands)
+# Run
+https://smart-workboard.onrender.com
 
-```bash
-cd server
-npm install
-npm start
 ```
 
-Then open **http://localhost:4000** in your browser (the server now serves the
-frontend too — no need to open `index.html` directly).
 
 ## How collaboration works
 
