@@ -335,8 +335,9 @@ app.get("/api/activity", requireAuth, requireGroupMember, (req, res) => {
 // ================= Health check =================
 app.get("/api/health", (req, res) => res.status(200).json({ status: "ok" }));
 // ================= Root Route =================
+// ================= Root Route (Serve Frontend) =================
 app.get("/", (req, res) => {
-  res.status(200).send("Smart Workboard Backend is running successfully!");
+  res.sendFile(path.join(__dirname, "../client/index.html"));
 });
 // ================= Start (must wait for DB init) =================
 initDb().then(() => {
