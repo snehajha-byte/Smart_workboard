@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Workboard — Collaborative Team Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Confetti Canvas Overlay for Celebrations -->
+  <canvas id="confetti-canvas" class="confetti-canvas"></canvas>
+
+  <!-- ===== Auth Screen (Split SaaS Onboarding) ===== -->
+  <div id="auth-screen" class="overlay-screen">
+    <div class="auth-split-layout">
+      <!-- Left: SaaS Showcase & Value Proposition -->
+      <div class="auth-showcase-panel">
+        <div class="showcase-brand">
+          <div class="brand-logo-pill">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="4" />
+              <path d="M7 8h10M7 12h7M7 16h4" />
+            </svg>
+          </div>
+          <div class="brand-name-group">
+            <span class="auth-title">Workboard</span>
+            <span class="version-tag">PRO v2.4</span>
+          </div>
+        </div>
+
+        <h1 class="showcase-headline">Where ambitious teams deliver project milestones.</h1>
+        <p class="showcase-sub">A high-performance workspace combining offline-first notes, isolated team groups, and real-time deliverable tracking.</p>
+
+        <div class="showcase-features-list">
+          <div class="showcase-feature-item">
+            <div class="feature-icon-box">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div>
+              <strong>Offline-First Synchronization</strong>
+              <p>Capture architecture notes with zero connectivity; auto-syncs the instant you reconnect.</p>
+            </div>
+          </div>
+
+          <div class="showcase-feature-item">
+            <div class="feature-icon-box">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div>
+              <strong>Cryptographic Group Scoping</strong>
+              <p>Every query is strictly isolated to your group. Zero cross-workspace data leakage guaranteed.</p>
+            </div>
+          </div>
+
+          <div class="showcase-feature-item">
+            <div class="feature-icon-box">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </div>
+            <div>
+              <strong>48-Hour Milestone Watchdog</strong>
+              <p>Automatic proximity tracking and live team notifications keep deliverables on schedule.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="showcase-quote-card">
+          <div class="quote-stars">★★★★★</div>
+          <p class="quote-text">“The fastest, cleanest collaborative workboard for team capstone projects. Everything works offline seamlessly.”</p>
+          <div class="quote-author">— Systems Engineering Review Board</div>
+        </div>
+      </div>
+
+      <!-- Right: Auth Form Card -->
+      <div class="auth-card-panel">
+        <div class="auth-card">
+          <div class="auth-card-header">
+            <h2>Welcome to Workboard</h2>
+            <p class="auth-card-sub">Sign in to your account or register a new user profile.</p>
+          </div>
+
+          <div class="auth-tabs" role="tablist">
+            <button class="auth-tab-btn active" data-authtab="login" type="button" role="tab" aria-selected="true">Sign In</button>
+            <button class="auth-tab-btn" data-authtab="signup" type="button" role="tab" aria-selected="false">Create Account</button>
+          </div>
+
+          <!-- Login Form -->
+          <form id="login-form" class="auth-form active">
+            <div class="input-group">
+              <label for="login-username">Username</label>
+              <div class="input-icon-wrap">
+                <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <input type="text" id="login-username" placeholder="e.g. alex" required autocomplete="username" />
+              </div>
+            </div>
+            <div class="input-group">
+              <div class="label-row">
+                <label for="login-password">Password</label>
+              </div>
+              <div class="input-icon-wrap">
+                <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password" />
+                <button type="button" class="pwd-toggle" data-target="login-password" title="Toggle password visibility" aria-label="Toggle password visibility">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <button type="submit" class="primary-btn full-width" id="login-submit-btn">
+              <span>Sign In to Workspace</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+            <p class="auth-error" id="login-error" role="alert"></p>
+          </form>
+
+          <!-- Signup Form -->
+          <form id="signup-form" class="auth-form">
+            <div class="input-group">
+              <label for="signup-name">Full Name</label>
+              <div class="input-icon-wrap">
+                <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <input type="text" id="signup-name" placeholder="e.g. Alex Rivera" required />
+              </div>
+            </div>
+            <div class="input-group">
+              <label for="signup-username">Username</label>
+              <div class="input-icon-wrap">
+                <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></svg>
+                <input type="text" id="signup-username" placeholder="alexr" required autocomplete="username" />
+              </div>
+            </div>
+            <div class="input-group">
+              <label for="signup-password">Password</label>
+              <div class="input-icon-wrap">
+                <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <input type="password" id="signup-password" placeholder="Create a strong password" required autocomplete="new-password" />
+                <button type="button" class="pwd-toggle" data-target="signup-password" title="Toggle password visibility" aria-label="Toggle password visibility">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <button type="submit" class="primary-btn full-width" id="signup-submit-btn">
+              <span>Create Free Account</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+            <p class="auth-error" id="signup-error" role="alert"></p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Group Screen (Workspace Selector & Creator) ===== -->
+  <div id="group-screen" class="overlay-screen" style="display:none">
+    <div class="workspace-selection-container">
+      <div class="auth-card group-screen-card">
+        <div class="screen-header">
+          <div class="badge-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <h2>Select Team Workspace</h2>
+          <p class="tab-sub">Each workspace is cryptographically isolated with its own notes, tasks, milestones, and discussions.</p>
+        </div>
+
+        <div class="groups-section">
+          <div class="section-title-row">
+            <h3 class="section-title">Your Workspaces</h3>
+            <span class="section-badge" id="workspaces-count-badge">0 active</span>
+          </div>
+          <ul id="my-groups-list" class="entry-list group-entries"></ul>
+        </div>
+
+        <div class="divider"><span>OR SWITCH / CREATE</span></div>
+
+        <div class="auth-tabs" role="tablist">
+          <button class="auth-tab-btn active" data-grouptab="create" type="button" role="tab">Create Workspace</button>
+          <button class="auth-tab-btn" data-grouptab="join" type="button" role="tab">Join with Code</button>
+        </div>
+
+        <!-- Create Group Form -->
+        <form id="create-group-form" class="auth-form active">
+          <div class="input-group">
+            <label for="create-group-name">Workspace Name</label>
+            <input type="text" id="create-group-name" placeholder="e.g. Distributed Systems Lab" required />
+          </div>
+          <div class="input-group">
+            <label for="create-group-password">Access Password</label>
+            <div class="input-icon-wrap">
+              <input type="password" id="create-group-password" placeholder="Workspace password for team members" required />
+              <button type="button" class="pwd-toggle" data-target="create-group-password" title="Toggle password visibility">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+          <button type="submit" class="primary-btn full-width">
+            <span>Create New Workspace</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <p class="auth-error" id="create-group-error" role="alert"></p>
+        </form>
+
+        <!-- Join Group Form -->
+        <form id="join-group-form" class="auth-form">
+          <div class="input-group">
+            <label for="join-group-code">Group Invitation Code</label>
+            <input type="text" id="join-group-code" placeholder="e.g. WB-7F3K2" required style="text-transform:uppercase; letter-spacing: 0.1em; font-family: 'JetBrains Mono', monospace;" />
+          </div>
+          <div class="input-group">
+            <label for="join-group-password">Group Password</label>
+            <div class="input-icon-wrap">
+              <input type="password" id="join-group-password" placeholder="Enter group password" required />
+              <button type="button" class="pwd-toggle" data-target="join-group-password" title="Toggle password visibility">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+          <button type="submit" class="primary-btn full-width">
+            <span>Join Existing Workspace</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+          <p class="auth-error" id="join-group-error" role="alert"></p>
+        </form>
+
+        <button id="logout-btn" class="ghost-btn full-width" style="margin-top:1.25rem;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          Sign Out of Account
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Main App Shell ===== -->
+  <div class="app-shell" id="app-shell" style="display:none">
+    
+    <!-- Mobile Topbar -->
+    <header class="mobile-topbar">
+      <div class="mobile-brand">
+        <div class="brand-logo-pill-sm">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <rect x="3" y="3" width="18" height="18" rx="4" />
+            <path d="M7 8h10M7 12h7M7 16h4" />
+          </svg>
+        </div>
+        <span class="brand-name">Workboard</span>
+      </div>
+      <div class="mobile-topbar-actions">
+        <button id="mobile-theme-btn" class="icon-action-btn" title="Toggle Theme" aria-label="Toggle theme">
+          <svg class="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+        <button id="mobile-menu-toggle" class="icon-action-btn" title="Open Menu" aria-label="Toggle sidebar menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Sidebar Backdrop for mobile -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="main-sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <div class="brand-logo-pill">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <rect x="3" y="3" width="18" height="18" rx="4" />
+              <path d="M7 8h10M7 12h7M7 16h4" />
+            </svg>
+          </div>
+          <div class="brand-text-col">
+            <span class="brand-name">Workboard</span>
+            <span class="brand-badge-sub">Collaborative Hub</span>
+          </div>
+        </div>
+        <button id="sidebar-close-btn" class="sidebar-close-btn" aria-label="Close sidebar">✕</button>
+      </div>
+
+      <!-- Group Indicator Card with copy code -->
+      <div class="group-indicator-card" id="group-indicator">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="sidebar-nav" aria-label="Main Navigation">
+        <div class="nav-section-label">MAIN WORKSPACE</div>
+        <button class="nav-btn active" data-tab="dashboard">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span class="nav-text">Overview</span>
+        </button>
+        <button class="nav-btn" data-tab="notes">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span class="nav-text">Notes</span>
+          <span id="nav-notes-badge" class="nav-counter-pill"></span>
+        </button>
+        <button class="nav-btn" data-tab="tasks">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span class="nav-text">Tasks</span>
+          <span id="nav-tasks-badge" class="nav-counter-pill"></span>
+        </button>
+        <button class="nav-btn" data-tab="milestones">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span class="nav-text">Milestones</span>
+          <span id="nav-milestones-badge" class="nav-counter-pill warning"></span>
+        </button>
+
+        <div class="nav-section-label" style="margin-top:0.75rem;">COLLABORATION</div>
+        <button class="nav-btn" data-tab="comments">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="nav-text">Comments</span>
+        </button>
+        <button class="nav-btn" data-tab="activity">
+          <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span class="nav-text">Activity Feed</span>
+          <span class="live-dot" title="Live sync active"></span>
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <!-- User Profile Pill -->
+        <div class="user-profile-widget" id="user-profile-widget">
+          <!-- Rendered dynamically -->
+        </div>
+
+        <div class="sidebar-actions-grid">
+          <button id="switch-group-btn" class="sidebar-action-btn" title="Switch workspace">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><polyline points="4 8 4 3 9 3"/><line x1="4" y1="3" x2="9" y2="9"/></svg>
+            <span>Switch</span>
+          </button>
+          <button id="dark-toggle" class="sidebar-action-btn" title="Toggle theme">
+            <span class="theme-toggle-icon">🌙</span>
+            <span class="theme-label">Theme</span>
+          </button>
+          <button id="shortcuts-btn" class="sidebar-action-btn" title="Shortcuts (?)">
+            <span style="font-weight:700">?</span>
+            <span>Keys</span>
+          </button>
+        </div>
+
+        <div id="status-banner" class="status-banner" role="status">
+          <span class="status-dot"></span>
+          <span class="status-text">Connecting…</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-viewport">
+      <div class="tab-content-wrap">
+
+        <!-- ================= Tab 1: Dashboard ================= -->
+        <section id="dashboard" class="tab active" role="tabpanel">
+          <header class="tab-header dashboard-header">
+            <div>
+              <div class="welcome-chip" id="dashboard-date">Today</div>
+              <h1 id="dashboard-greeting">Overview</h1>
+              <p class="tab-sub">Real-time pulse of your team's projects, tasks, and deadlines.</p>
+            </div>
+            <div class="header-actions">
+              <button type="button" class="secondary-btn quick-tab-btn" data-target-tab="tasks">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>New Task</span>
+              </button>
+              <button type="button" class="primary-btn quick-tab-btn" data-target-tab="notes">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Quick Note</span>
+              </button>
+            </div>
+          </header>
+
+          <!-- Completion Progress Ring & Breakdown Banner -->
+          <div class="progress-hero-card" id="dashboard-progress-card">
+            <div class="progress-ring-container">
+              <div class="ring-wrap">
+                <svg class="progress-ring-svg" width="104" height="104" viewBox="0 0 100 100">
+                  <circle class="ring-bg" cx="50" cy="50" r="42" stroke-width="8" />
+                  <circle class="ring-fill" id="task-progress-ring" cx="50" cy="50" r="42" stroke-width="8" stroke-dasharray="263.89" stroke-dashoffset="263.89" />
+                </svg>
+                <div class="ring-text">
+                  <span class="ring-percentage" id="task-progress-percent">0%</span>
+                  <span class="ring-sub">Done</span>
+                </div>
+              </div>
+              <div class="progress-hero-details">
+                <div class="progress-hero-title-row">
+                  <span class="progress-hero-title">Task Completion Progress</span>
+                  <span class="celebration-pill" id="celebration-pill" style="display:none">🎉 All Caught Up!</span>
+                </div>
+                <div class="progress-hero-meta" id="task-progress-summary">0 of 0 tasks completed</div>
+                
+                <!-- Priority Distribution Bar -->
+                <div class="distribution-bar-wrap">
+                  <div class="distribution-bar">
+                    <div class="dist-segment dist-high" id="dist-high" title="High Priority" style="width:0%"></div>
+                    <div class="dist-segment dist-normal" id="dist-normal" title="Normal Priority" style="width:0%"></div>
+                    <div class="dist-segment dist-low" id="dist-low" title="Low Priority" style="width:0%"></div>
+                  </div>
+                  <div class="distribution-legend">
+                    <span class="legend-item"><span class="legend-dot high"></span> High: <b id="legend-high-count">0</b></span>
+                    <span class="legend-item"><span class="legend-dot normal"></span> Normal: <b id="legend-normal-count">0</b></span>
+                    <span class="legend-item"><span class="legend-dot low"></span> Low: <b id="legend-low-count">0</b></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stats Grid -->
+          <div class="stats-grid">
+            <div class="stat-card" data-stat-target="notes">
+              <div class="stat-top-row">
+                <div class="stat-icon-wrap icon-notes">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                <span class="stat-badge">Offline synced</span>
+              </div>
+              <div class="stat-details">
+                <span class="stat-number" id="stat-notes">0</span>
+                <span class="stat-label">Notes</span>
+              </div>
+            </div>
+
+            <div class="stat-card" data-stat-target="tasks">
+              <div class="stat-top-row">
+                <div class="stat-icon-wrap icon-tasks">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                </div>
+                <span class="stat-badge">Action needed</span>
+              </div>
+              <div class="stat-details">
+                <span class="stat-number" id="stat-tasks-open">0</span>
+                <span class="stat-label">Open Tasks</span>
+              </div>
+            </div>
+
+            <div class="stat-card" data-stat-target="milestones">
+              <div class="stat-top-row">
+                <div class="stat-icon-wrap icon-milestones">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                </div>
+                <span class="stat-badge warning">Within 48h</span>
+              </div>
+              <div class="stat-details">
+                <span class="stat-number" id="stat-milestones-due">0</span>
+                <span class="stat-label">Milestones Due</span>
+              </div>
+            </div>
+
+            <div class="stat-card" data-stat-target="comments">
+              <div class="stat-top-row">
+                <div class="stat-icon-wrap icon-comments">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <span class="stat-badge">Feedback</span>
+              </div>
+              <div class="stat-details">
+                <span class="stat-number" id="stat-comments">0</span>
+                <span class="stat-label">Comments</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Next Up Priority Card & Mini Activity Preview -->
+          <div class="dashboard-split-grid">
+            <div class="next-up-container">
+              <div class="card-subtitle">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>What's Next</span>
+              </div>
+              <div id="dashboard-next-up" class="next-up-content">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+
+            <div class="activity-preview-card">
+              <div class="card-subtitle-row">
+                <div class="card-subtitle">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  <span>Recent Team Activity</span>
+                </div>
+                <button type="button" class="text-link-btn" id="view-all-activity-btn">View all →</button>
+              </div>
+              <div id="dashboard-mini-activity" class="mini-activity-feed">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= Tab 2: Notes ================= -->
+        <section id="notes" class="tab" role="tabpanel">
+          <header class="tab-header">
+            <div>
+              <h1>Notes</h1>
+              <p class="tab-sub">Offline-first notes. Saved instantly locally and synced to your group. <span id="sync-indicator" class="sync-status-indicator"></span></p>
+            </div>
+          </header>
+
+          <!-- Note Composer -->
+          <form id="note-form" class="composer-card">
+            <div class="composer-header">
+              <input type="text" id="note-title" placeholder="Note Title (e.g. Architecture Decisions)" class="seamless-title-input" />
+            </div>
+
+            <div class="format-toolbar" role="toolbar" aria-label="Text Formatting">
+              <button type="button" class="fmt-btn" data-fmt="bold" title="Bold (Ctrl+B)">
+                <strong>B</strong>
+              </button>
+              <button type="button" class="fmt-btn" data-fmt="italic" title="Italic (Ctrl+I)">
+                <em>I</em>
+              </button>
+              <button type="button" class="fmt-btn" data-fmt="heading" title="Heading 3">
+                <span>H3</span>
+              </button>
+              <button type="button" class="fmt-btn" data-fmt="bullet" title="Bullet List">
+                <span>• List</span>
+              </button>
+              <button type="button" class="fmt-btn" data-fmt="highlight" title="Highlight Text">
+                <mark>Highlight</mark>
+              </button>
+            </div>
+
+            <textarea id="note-text" placeholder="Write markdown note here… Works seamlessly even without internet connection." rows="4" required></textarea>
+
+            <div class="composer-footer">
+              <div class="keyboard-tip">
+                <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to save instantly
+              </div>
+              <button type="submit" class="primary-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                <span>Save Note</span>
+              </button>
+            </div>
+          </form>
+
+          <!-- Notes Filter & Action Bar -->
+          <div class="notes-filter-bar">
+            <div class="search-input-wrap">
+              <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="note-search" placeholder="Search notes by title or content…" />
+              <button type="button" id="clear-search-btn" class="clear-btn" style="display:none" aria-label="Clear search">✕</button>
+            </div>
+            <button id="export-notes-btn" type="button" class="secondary-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Export .txt</span>
+            </button>
+          </div>
+
+          <!-- Notes Grid -->
+          <ul id="note-list" class="entry-list notes-grid"></ul>
+        </section>
+
+        <!-- ================= Tab 3: Tasks ================= -->
+        <section id="tasks" class="tab" role="tabpanel">
+          <header class="tab-header">
+            <div>
+              <h1>Tasks</h1>
+              <p class="tab-sub">Organized by priority and due date. Assigned with team accountability.</p>
+            </div>
+            <div class="task-filter-chips" role="group" aria-label="Task Filters">
+              <button type="button" class="chip active" data-taskfilter="all">All</button>
+              <button type="button" class="chip" data-taskfilter="open">In Progress</button>
+              <button type="button" class="chip" data-taskfilter="done">Completed</button>
+            </div>
+          </header>
+
+          <!-- Task Composer -->
+          <form id="task-form" class="composer-card form-grid-layout">
+            <div class="form-row-main">
+              <div class="input-wrap flex-grow-2">
+                <label for="task-title" class="field-label-sm">Task Name</label>
+                <input type="text" id="task-title" placeholder="What deliverable needs action?" required />
+              </div>
+              <div class="input-wrap">
+                <label for="task-due" class="field-label-sm">Due Date</label>
+                <input type="date" id="task-due" required />
+              </div>
+              <div class="input-wrap">
+                <label for="task-priority" class="field-label-sm">Priority</label>
+                <select id="task-priority">
+                  <option value="low">Low Priority</option>
+                  <option value="normal" selected>Normal Priority</option>
+                  <option value="high">High Priority</option>
+                </select>
+              </div>
+              <div class="input-wrap">
+                <label for="task-owner" class="field-label-sm">Assignee</label>
+                <input type="text" id="task-owner" placeholder="Defaults to you" />
+              </div>
+              <div class="input-wrap btn-wrap-bottom">
+                <button type="submit" class="primary-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>Add Task</span>
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Task Search Filter -->
+          <div class="task-search-row">
+            <div class="search-input-wrap">
+              <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="task-search-input" placeholder="Search tasks by title or assignee…" />
+            </div>
+          </div>
+
+          <!-- Tasks List -->
+          <ul id="task-list" class="entry-list tasks-container"></ul>
+        </section>
+
+        <!-- ================= Tab 4: Milestones ================= -->
+        <section id="milestones" class="tab" role="tabpanel">
+          <header class="tab-header">
+            <div>
+              <h1>Milestones</h1>
+              <p class="tab-sub">Key team deliverables with automatic 48-hour proximity tracking.</p>
+            </div>
+          </header>
+
+          <!-- Milestone Composer -->
+          <form id="milestone-form" class="composer-card form-grid-layout">
+            <div class="form-row-main">
+              <div class="input-wrap flex-grow-3">
+                <label for="milestone-title" class="field-label-sm">Milestone Goal</label>
+                <input type="text" id="milestone-title" placeholder="e.g. Beta Release 2.0 or Final Presentation" required />
+              </div>
+              <div class="input-wrap flex-grow-1">
+                <label for="milestone-due" class="field-label-sm">Target Date</label>
+                <input type="date" id="milestone-due" required />
+              </div>
+              <div class="input-wrap btn-wrap-bottom">
+                <button type="submit" class="primary-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>Add Milestone</span>
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Milestones List -->
+          <ul id="milestone-list" class="entry-list milestones-grid"></ul>
+        </section>
+
+        <!-- ================= Tab 5: Comments & Work Items ================= -->
+        <section id="comments" class="tab" role="tabpanel">
+          <header class="tab-header">
+            <div>
+              <h1>Work Items & Discussion</h1>
+              <p class="tab-sub">Threaded contextual feedback attached to specific deliverables.</p>
+            </div>
+          </header>
+
+          <div class="workitem-management-card">
+            <!-- Add New Work Item -->
+            <form id="new-workitem-form" class="workitem-creator-form">
+              <div class="input-group-row">
+                <input type="text" id="new-workitem-name" placeholder="Name a new deliverable (e.g. 'Authentication Flow', 'API Refactor')" required />
+                <button type="submit" class="secondary-btn">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>New Deliverable</span>
+                </button>
+              </div>
+            </form>
+
+            <div class="workitem-selector-container">
+              <label class="field-label-sm" for="workitem-select">Active Work Item to Discuss</label>
+              <div class="select-wrap">
+                <select id="workitem-select">
+                  <option value="">Select a work item to inspect…</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Comments Feed -->
+          <div class="comments-card-thread">
+            <form id="comment-form" class="comment-composer-form">
+              <div class="comment-input-row">
+                <input type="text" id="comment-text" placeholder="Write feedback or post an update for teammates..." required />
+                <button type="submit" class="primary-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  <span>Post</span>
+                </button>
+              </div>
+            </form>
+            <ul id="comment-list" class="entry-list comments-stream"></ul>
+          </div>
+        </section>
+
+        <!-- ================= Tab 6: Activity Feed ================= -->
+        <section id="activity" class="tab" role="tabpanel">
+          <header class="tab-header">
+            <div>
+              <div class="badge-live-pulse">● Live Stream</div>
+              <h1>Activity Feed</h1>
+              <p class="tab-sub">Comprehensive chronological history of changes, notes, and milestones.</p>
+            </div>
+            <div class="header-actions">
+              <button id="refresh-activity-btn" type="button" class="secondary-btn" title="Refresh feed">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <span>Refresh</span>
+              </button>
+            </div>
+          </header>
+
+          <!-- Activity Filter Chips -->
+          <div class="activity-filter-chips" role="group" aria-label="Activity Filters">
+            <button type="button" class="chip active" data-actfilter="all">All Events</button>
+            <button type="button" class="chip" data-actfilter="task">Tasks</button>
+            <button type="button" class="chip" data-actfilter="milestone">Milestones</button>
+            <button type="button" class="chip" data-actfilter="note">Notes</button>
+            <button type="button" class="chip" data-actfilter="comment">Comments</button>
+          </div>
+
+          <div class="timeline-container">
+            <ul id="activity-timeline-list" class="activity-timeline">
+              <!-- Rendered dynamically -->
+            </ul>
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Mobile Bottom Navigation Bar (Visible on mobile/tablet) -->
+    <nav class="mobile-bottom-nav" aria-label="Mobile Navigation">
+      <button class="mobile-nav-item active" data-tab="dashboard">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>Overview</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="notes">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span>Notes</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="tasks">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        <span>Tasks</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="milestones">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <span>Milestones</span>
+      </button>
+      <button class="mobile-nav-item" data-tab="activity">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Activity</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ===== Custom Modal: Edit Note ===== -->
+  <div id="edit-note-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="edit-modal-title">Edit Note</h2>
+        <button type="button" class="modal-close-btn" id="edit-modal-close" aria-label="Close modal">✕</button>
+      </div>
+      <form id="edit-note-form" class="modal-form">
+        <input type="hidden" id="edit-note-id" />
+        <div class="input-group">
+          <label for="edit-note-title" class="field-label-sm">Note Title</label>
+          <input type="text" id="edit-note-title" required />
+        </div>
+        <div class="format-toolbar" style="margin: 0.5rem 0;">
+          <button type="button" class="fmt-btn" data-fmt-edit="bold" title="Bold"><strong>B</strong></button>
+          <button type="button" class="fmt-btn" data-fmt-edit="italic" title="Italic"><em>I</em></button>
+          <button type="button" class="fmt-btn" data-fmt-edit="heading" title="Heading">H3</button>
+          <button type="button" class="fmt-btn" data-fmt-edit="bullet" title="Bullet List">• List</button>
+          <button type="button" class="fmt-btn" data-fmt-edit="highlight" title="Highlight"><mark>Mark</mark></button>
+        </div>
+        <div class="input-group">
+          <label for="edit-note-text" class="field-label-sm">Content</label>
+          <textarea id="edit-note-text" rows="6" required></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary-btn" id="edit-modal-cancel">Cancel</button>
+          <button type="submit" class="primary-btn">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== Custom Modal: Confirm Deletion ===== -->
+  <div id="delete-confirm-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+    <div class="modal-card modal-card-sm">
+      <div class="modal-danger-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <h2 id="delete-modal-title" style="text-align:center">Delete Note?</h2>
+      <p id="delete-modal-message" class="modal-sub-text" style="text-align:center">Are you sure you want to delete this note? This action cannot be undone.</p>
+      <div class="modal-actions" style="justify-content:center; margin-top:1.5rem">
+        <button type="button" class="secondary-btn" id="delete-cancel-btn">Cancel</button>
+        <button type="button" class="danger-btn" id="delete-confirm-btn">Delete Permanently</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Custom Modal: Keyboard Shortcuts Cheat Sheet ===== -->
+  <div id="shortcuts-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="shortcuts-title">Keyboard Shortcuts</h2>
+        <button type="button" class="modal-close-btn" id="shortcuts-modal-close" aria-label="Close modal">✕</button>
+      </div>
+      <div class="shortcuts-grid">
+        <div class="shortcut-row">
+          <span class="shortcut-desc">Quick-save note</span>
+          <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-desc">Switch tabs (Overview, Notes, Tasks, etc.)</span>
+          <span class="shortcut-keys"><kbd>1</kbd> … <kbd>6</kbd></span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-desc">Focus note search</span>
+          <span class="shortcut-keys"><kbd>/</kbd></span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-desc">Focus task composer</span>
+          <span class="shortcut-keys"><kbd>T</kbd></span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-desc">Focus note composer</span>
+          <span class="shortcut-keys"><kbd>N</kbd></span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-desc">Toggle Dark / Light theme</span>
+          <span class="shortcut-keys"><kbd>Alt</kbd> + <kbd>T</kbd></span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-desc">Close dialog / modal / drawer</span>
+          <span class="shortcut-keys"><kbd>Esc</kbd></span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-desc">Show this shortcuts panel</span>
+          <span class="shortcut-keys"><kbd>?</kbd></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

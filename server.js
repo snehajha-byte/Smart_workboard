@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const fs = require("fs");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { initDb, run, all, get } = require("./db");
@@ -8,7 +9,12 @@ const { initDb, run, all, get } = require("./db");
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "../client")));
+
+// Determine client directory (supports both nested client/ and sibling ../client/)
+const clientDir = fs.existsSync(path.join(__dirname, "client"))
+  ? path.join(__dirname, "client")
+  : path.join(__dirname, "../client");
+app.use(express.static(clientDir));
 
 const PORT = process.env.PORT || 4000;
 
@@ -334,9 +340,16 @@ app.get("/api/activity", requireAuth, requireGroupMember, (req, res) => {
 
 // ================= Health check =================
 app.get("/api/health", (req, res) => res.status(200).json({ status: "ok" }));
-// ================= Root Route =================
-// ================= Root Route (Serve Frontend) =================
-app.use(express.static(path.join(__dirname, "client")));
+
+// ================= Root / SPA Route (Serve Frontend) =================
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api")) return next();
+  const indexPath = path.join(clientDir, "index.html");
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  next();
+});
 // ================= Start (must wait for DB init) =================
 initDb().then(() => {
   app.listen(PORT, () => {
