@@ -82,6 +82,18 @@
             <p class="auth-card-sub">Sign in to your account or register a new user profile.</p>
           </div>
 
+          <!-- 1-Click Interactive Demo Button -->
+          <div class="demo-access-banner">
+            <button type="button" class="demo-quick-btn" id="demo-quick-btn">
+              <span class="demo-btn-pulse">⚡</span>
+              <div class="demo-btn-text">
+                <strong>Explore Live Demo (1-Click)</strong>
+                <small>Pre-loaded tasks, milestones, notes & discussions</small>
+              </div>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+
           <div class="auth-tabs" role="tablist">
             <button class="auth-tab-btn active" data-authtab="login" type="button" role="tab" aria-selected="true">Sign In</button>
             <button class="auth-tab-btn" data-authtab="signup" type="button" role="tab" aria-selected="false">Create Account</button>
@@ -93,7 +105,7 @@
               <label for="login-username">Username</label>
               <div class="input-icon-wrap">
                 <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                <input type="text" id="login-username" placeholder="e.g. alex" required autocomplete="username" />
+                <input type="text" id="login-username" placeholder="e.g. prof_demo" required autocomplete="username" />
               </div>
             </div>
             <div class="input-group">
@@ -112,6 +124,9 @@
               <span>Sign In to Workspace</span>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </button>
+            <div class="demo-credentials-hint">
+              <span>💡 Demo Account: <code>prof_demo</code> · Password: <code>demoPassword123</code></span>
+            </div>
             <p class="auth-error" id="login-error" role="alert"></p>
           </form>
 
@@ -170,6 +185,18 @@
             <span class="section-badge" id="workspaces-count-badge">0 active</span>
           </div>
           <ul id="my-groups-list" class="entry-list group-entries"></ul>
+
+          <!-- Featured Demo Workspace Direct Access -->
+          <div class="featured-demo-card">
+            <div class="featured-demo-info">
+              <span class="featured-tag">FEATURED WORKSPACE</span>
+              <strong>CS Capstone Project Hub <code>(WB-DEMO1)</code></strong>
+              <p>Pre-loaded with tasks, 48h milestone alert, formatted notes, comments & activity timeline.</p>
+            </div>
+            <button type="button" id="join-featured-demo-btn" class="primary-btn demo-enter-btn">
+              <span>Enter Demo Hub →</span>
+            </button>
+          </div>
         </div>
 
         <div class="divider"><span>OR SWITCH / CREATE</span></div>

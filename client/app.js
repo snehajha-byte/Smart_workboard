@@ -270,6 +270,41 @@ document.querySelectorAll("[data-authtab]").forEach((btn) => {
   });
 });
 
+document.getElementById("demo-quick-btn")?.addEventListener("click", async () => {
+  const btn = document.getElementById("demo-quick-btn");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/auth/demo`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      // Fallback: regular login with demo credentials
+      const loginRes = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "prof_demo", password: "demoPassword123" })
+      });
+      const loginData = await loginRes.json();
+      if (!loginRes.ok) throw new Error(loginData.error || "Demo login failed");
+      setToken(loginData.token);
+      setCurrentUser(loginData.user);
+      const groupsRes = await apiFetch("/groups/mine");
+      const groups = await groupsRes.json();
+      const demoG = groups.find((g) => g.code === "WB-DEMO1") || groups[0];
+      if (demoG) setCurrentGroup(demoG);
+    } else {
+      setToken(data.token);
+      setCurrentUser(data.user);
+      if (data.group) setCurrentGroup(data.group);
+    }
+    boot();
+    showToast("Welcome to CS Capstone Project Hub! 🚀", "success");
+  } catch (err) {
+    showToast("Could not launch demo: " + err.message, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
 document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const username = document.getElementById("login-username").value;
@@ -419,6 +454,32 @@ document.getElementById("join-group-form").addEventListener("submit", async (e) 
     boot();
     showToast(`Joined "${data.name}"!`, "success");
   } catch (err) { errorEl.textContent = "Could not reach the server."; }
+});
+
+document.getElementById("join-featured-demo-btn")?.addEventListener("click", async () => {
+  try {
+    const res = await apiFetch("/groups/join", {
+      method: "POST",
+      body: JSON.stringify({ code: "WB-DEMO1", password: "demo" })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setCurrentGroup(data);
+      boot();
+      showToast("Entered CS Capstone Project Hub! 🚀", "success");
+    } else {
+      const myRes = await apiFetch("/groups/mine");
+      const myGroups = await myRes.json();
+      const demo = myGroups.find((g) => g.code === "WB-DEMO1");
+      if (demo) {
+        setCurrentGroup(demo);
+        boot();
+        showToast("Entered CS Capstone Project Hub! 🚀", "success");
+      }
+    }
+  } catch (err) {
+    showToast("Could not join demo workspace", "error");
+  }
 });
 
 document.getElementById("logout-btn").addEventListener("click", () => {
@@ -1622,11 +1683,11 @@ async function enterApp() {
   loadTasks();
   loadMilestones();
   loadComments();
+  await pullSharedNotes();
   renderNotes();
   updateSyncIndicator();
   updateStatusBanner();
   syncPendingNotes();
-  pullSharedNotes();
 
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(() => {

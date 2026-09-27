@@ -14,7 +14,15 @@ app.use(express.json());
 const clientDir = fs.existsSync(path.join(__dirname, "client"))
   ? path.join(__dirname, "client")
   : path.join(__dirname, "../client");
-app.use(express.static(clientDir));
+app.use(express.static(clientDir, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith(".html") || filePath.endsWith(".js") || filePath.endsWith(".css")) {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+    }
+  }
+}));
 
 const PORT = process.env.PORT || 4000;
 
@@ -96,6 +104,19 @@ app.post("/api/auth/login", (req, res) => {
   const token = generateToken();
   run("UPDATE users SET token = ? WHERE id = ?", [token, user.id]);
   res.status(200).json({ token, user: safeUser(user) }); // password_hash never leaves this function
+});
+
+app.post("/api/auth/demo", (req, res) => {
+  const user = get("SELECT * FROM users WHERE LOWER(username) = 'prof_demo'");
+  if (!user) return res.status(404).json({ error: "Demo user not found" });
+  const token = generateToken();
+  run("UPDATE users SET token = ? WHERE id = ?", [token, user.id]);
+  const demoGroup = get("SELECT * FROM groups_table WHERE code = 'WB-DEMO1'");
+  res.status(200).json({
+    token,
+    user: safeUser(user),
+    group: demoGroup ? { id: demoGroup.id, name: demoGroup.name, code: demoGroup.code } : null
+  });
 });
 
 // ================= Groups =================
