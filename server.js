@@ -341,3 +341,18 @@ initDb().then(() => {
     console.log(`Smart Workboard (Release 2) running on http://localhost:${PORT}`);
   });
 });
+// Root Route
+// ================= Root Route =================
+app.get("/", (req, res) => {
+  res.status(200).send("Smart Workboard Backend is running successfully!");
+});
+
+// ================= Health check =================
+app.get("/api/health", (req, res) => res.status(200).json({ status: "ok" }));
+
+// ================= Start (must wait for DB init) =================
+initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Smart Workboard (Release 2) running on http://localhost:${PORT}`);
+  });
+});
