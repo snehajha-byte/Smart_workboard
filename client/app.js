@@ -1280,16 +1280,41 @@ class WhiteboardEngine {
     this.currentTool = tool;
     this.selectedElement = null;
     this.hoverAnchor = null;
+
+    // Commit any currently open text box when switching tools
+    if (tool !== "text") {
+      const openWrap = this.canvas?.parentElement?.querySelector(".canvas-floating-text-input-wrap");
+      if (openWrap && openWrap.commit) openWrap.commit();
+    }
+
     if (this.toolbarEl) {
       this.toolbarEl.querySelectorAll(".sketch-tool-btn[data-tool]").forEach((b) => {
         b.classList.toggle("active", b.dataset.tool === tool);
       });
     }
+
     if (this.canvas) {
-      if (tool === "select") this.canvas.style.cursor = "default";
-      else if (tool === "text") this.canvas.style.cursor = "text";
-      else if (tool === "eraser") this.canvas.style.cursor = "not-allowed";
-      else this.canvas.style.cursor = "crosshair";
+      if (tool === "select") {
+        this.canvas.style.cursor = "default";
+      } else if (tool === "text") {
+        this.canvas.style.cursor = "text";
+        // When clicking T, if no input is open, immediately place text box at center ready to type!
+        const wrapper = this.canvas.parentElement;
+        const existing = wrapper?.querySelector(".canvas-floating-text-input-wrap");
+        if (!existing) {
+          const rect = this.canvas.getBoundingClientRect();
+          const centerX = Math.max(30, Math.floor(rect.width / 2 - 90));
+          const centerY = Math.max(40, Math.floor(rect.height / 2 - 18));
+          this.placeTextInput({ x: centerX, y: centerY });
+        } else {
+          const inp = existing.querySelector(".canvas-floating-text-input");
+          if (inp) inp.focus();
+        }
+      } else if (tool === "eraser") {
+        this.canvas.style.cursor = "not-allowed";
+      } else {
+        this.canvas.style.cursor = "crosshair";
+      }
     }
     this.render();
   }
@@ -1301,6 +1326,10 @@ class WhiteboardEngine {
       this.selectedElement.color = color;
       this.triggerChange();
     }
+    // Update open text input color if any
+    const openInp = this.canvas?.parentElement?.querySelector(".canvas-floating-text-input");
+    if (openInp) openInp.style.color = color;
+
     if (this.toolbarEl) {
       this.toolbarEl.querySelectorAll(".sketch-color-dot").forEach((b) => {
         b.classList.toggle("active", b.dataset.color === color);
@@ -1323,14 +1352,24 @@ class WhiteboardEngine {
     if (!this.canvas) return;
 
     const onPointerDown = (e) => {
-      if (e.target && e.target.classList.contains("canvas-floating-text-input")) return;
+      if (e.target && e.target.closest && e.target.closest(".canvas-floating-text-input-wrap")) return;
 
       const pt = this.getCanvasPoint(e);
       this.isPointerDown = true;
       this.dragStart = { x: pt.x, y: pt.y };
 
       if (this.currentTool === "text") {
-        this.placeTextInput(pt);
+        // If an input is already open, commit it first
+        const openWrap = this.canvas?.parentElement?.querySelector(".canvas-floating-text-input-wrap");
+        if (openWrap && openWrap.commit) openWrap.commit();
+
+        // Check if user clicked an existing text element to edit it
+        const hit = this.hitTest(pt.x, pt.y);
+        if (hit && hit.type === "text") {
+          this.placeTextInput({ x: hit.x, y: hit.y }, hit.text, hit);
+        } else {
+          this.placeTextInput(pt);
+        }
         this.isPointerDown = false;
         return;
       }
@@ -1653,44 +1692,102 @@ class WhiteboardEngine {
     this.triggerChange();
   }
 
-  placeTextInput(pt) {
+  placeTextInput(pt, initialText = "", editingElement = null) {
     const wrapper = this.canvas.parentElement;
     if (!wrapper) return;
+
+    // Remove any lingering floating inputs
+    wrapper.querySelectorAll(".canvas-floating-text-input-wrap").forEach(el => {
+      if (el.commit) el.commit();
+      else el.remove();
+    });
+
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const left = (canvasRect.left - wrapperRect.left) + pt.x;
+    const top = (canvasRect.top - wrapperRect.top) + pt.y;
+
+    const wrap = document.createElement("div");
+    wrap.className = "canvas-floating-text-input-wrap";
+    wrap.style.left = `${Math.max(8, left)}px`;
+    wrap.style.top = `${Math.max(8, top)}px`;
+
     const input = document.createElement("input");
     input.type = "text";
     input.className = "canvas-floating-text-input";
-    input.style.left = pt.x + "px";
-    input.style.top = pt.y + "px";
-    input.placeholder = "Label… (Enter to place)";
-    wrapper.appendChild(input);
-    input.focus();
+    input.placeholder = "Type text here…";
+    input.value = initialText || "";
+    input.style.color = this.currentColor || "#1E293B";
 
+    const doneBtn = document.createElement("button");
+    doneBtn.type = "button";
+    doneBtn.className = "canvas-text-done-btn";
+    doneBtn.innerHTML = "✓ Done";
+    doneBtn.title = "Place text (Enter)";
+
+    const hint = document.createElement("span");
+    hint.className = "canvas-text-hint";
+    hint.textContent = "↵ Enter";
+
+    wrap.appendChild(input);
+    wrap.appendChild(doneBtn);
+    wrap.appendChild(hint);
+    wrapper.appendChild(wrap);
+
+    let isCommitted = false;
     const commit = () => {
-      if (input.parentNode) {
-        const val = input.value.trim();
-        if (val) {
-          this.pushUndo();
+      if (isCommitted) return;
+      isCommitted = true;
+      const val = input.value.trim();
+      if (val) {
+        this.pushUndo();
+        if (editingElement) {
+          editingElement.text = val;
+          editingElement.color = this.currentColor || editingElement.color;
+        } else {
           this.elements.push({
             id: "txt-" + Date.now() + "-" + Math.random().toString(36).substr(2, 4),
             type: "text",
             x: pt.x,
             y: pt.y,
             text: val,
-            color: this.currentColor,
+            color: this.currentColor || "#1E293B",
             fontSize: 16
           });
-          this.render();
-          this.triggerChange();
         }
-        input.remove();
+        this.render();
+        this.triggerChange();
+      } else if (editingElement) {
+        this.pushUndo();
+        this.elements = this.elements.filter(e => e.id !== editingElement.id);
+        this.render();
+        this.triggerChange();
       }
+      wrap.remove();
     };
 
-    input.addEventListener("keydown", (ke) => {
-      if (ke.key === "Enter") commit();
-      if (ke.key === "Escape") input.remove();
+    wrap.commit = commit;
+
+    doneBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      commit();
     });
-    input.addEventListener("blur", commit);
+
+    input.addEventListener("keydown", (ke) => {
+      if (ke.key === "Enter") {
+        ke.preventDefault();
+        commit();
+      } else if (ke.key === "Escape") {
+        isCommitted = true;
+        wrap.remove();
+      }
+    });
+
+    setTimeout(() => {
+      input.focus();
+      if (initialText) input.select();
+    }, 40);
   }
 
   pushUndo() {
@@ -1711,6 +1808,8 @@ class WhiteboardEngine {
   }
 
   clear() {
+    const wrapper = this.canvas?.parentElement;
+    wrapper?.querySelectorAll(".canvas-floating-text-input-wrap").forEach(el => el.remove());
     this.elements = [];
     this.undoStack = [];
     this.redoStack = [];
