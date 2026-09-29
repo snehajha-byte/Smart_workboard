@@ -1,4 +1,17 @@
 const API_BASE = "/api";
+// === Release 3 State Variables ===
+let cachedNotebooks = [];
+let activeNotebookId = "all";
+let activeTagFilter = "";
+let selectedNoteColor = "";
+let cachedReactions = [];
+let cachedPins = {};
+let activePinNoteId = null;
+let currentActiveTab = "dashboard";
+let focusModeActive = false;
+let autoSaveTimer = null;
+let draggedTaskItem = null;
+
 
 // ================= Auth & Group State =================
 function getToken() { return localStorage.getItem("wb_token"); }
@@ -548,6 +561,8 @@ function showToast(message, type = "success") {
 
 // ================= Navigation & Tabs =================
 function switchTab(targetTabId) {
+  currentActiveTab = targetTabId;
+  sendPresenceHeartbeat();
   document.querySelectorAll(".nav-btn").forEach((b) => {
     b.classList.toggle("active", b.dataset.tab === targetTabId);
   });
@@ -811,10 +826,13 @@ function renderTaskList() {
   tasks.forEach((t) => {
     const isDone = t.status === "done";
     const li = document.createElement("li");
-    li.className = `task-item-card ${isDone ? "task-done" : ""}`;
+    li.className = `task-item-card ${isDone ? "task-done" : ""} ${t.color ? "color-" + t.color : ""}`;
     const ownerName = t.owner || "Unassigned";
 
     li.innerHTML = `
+      <div class="drag-handle" title="Drag to reorder" style="cursor:grab; padding:0 0.3rem; color:var(--text-dim); display:flex; align-items:center;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+      </div>
       <label class="custom-checkbox-wrap" aria-label="Mark task done">
         <input type="checkbox" class="task-checkbox" data-id="${t.id}" ${isDone ? "checked" : ""} />
         <span class="custom-check-box">
@@ -827,6 +845,7 @@ function renderTaskList() {
         <div class="task-title-text">${t.title}</div>
         <div class="task-meta-row">
           <span class="priority-pill ${t.priority || "normal"}">${t.priority || "normal"}</span>
+          ${t.color ? `<span class="tag-pill" style="font-size:0.68rem; text-transform:capitalize;">${t.color}</span>` : ""}
           <span>Due: <b>${t.due_date}</b></span>
           <span style="display:inline-flex; align-items:center; gap:0.35rem;">
             ${renderAvatarHTML(ownerName, 18)}
@@ -836,6 +855,7 @@ function renderTaskList() {
       </div>
     `;
     list.appendChild(li);
+    setupTaskDragAndDrop(li, t);
   });
 
   list.querySelectorAll(".task-checkbox").forEach((cb) => {
@@ -862,6 +882,47 @@ function renderTaskList() {
   });
 }
 
+function setupTaskDragAndDrop(li, task) {
+  li.setAttribute("draggable", "true");
+  li.addEventListener("dragstart", (e) => {
+    draggedTaskItem = { element: li, task };
+    li.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+  });
+  li.addEventListener("dragend", () => {
+    li.classList.remove("dragging");
+    draggedTaskItem = null;
+  });
+  li.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  });
+  li.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    if (!draggedTaskItem || draggedTaskItem.element === li) return;
+    const list = document.getElementById("task-list");
+    const items = Array.from(list.children);
+    const fromIdx = items.indexOf(draggedTaskItem.element);
+    const toIdx = items.indexOf(li);
+    if (fromIdx < 0 || toIdx < 0) return;
+
+    if (fromIdx < toIdx) {
+      list.insertBefore(draggedTaskItem.element, li.nextSibling);
+    } else {
+      list.insertBefore(draggedTaskItem.element, li);
+    }
+
+    const reorderedIds = Array.from(list.querySelectorAll(".task-checkbox")).map(cb => Number(cb.dataset.id));
+    try {
+      await apiFetch("/tasks/reorder", {
+        method: "PUT",
+        body: JSON.stringify({ task_ids: reorderedIds })
+      });
+      showToast("Task reordered ✓", "success");
+    } catch (err) {}
+  });
+}
+
 async function loadTasks() {
   const list = document.getElementById("task-list");
   if (!list) return;
@@ -879,10 +940,11 @@ document.getElementById("task-form").addEventListener("submit", async (e) => {
   const due_date = document.getElementById("task-due").value;
   const priority = document.getElementById("task-priority").value;
   const owner = document.getElementById("task-owner").value || (user ? user.name : "");
+  const color = document.getElementById("task-color")?.value || "";
 
   await apiFetch("/tasks", {
     method: "POST",
-    body: JSON.stringify({ title, due_date, priority, owner })
+    body: JSON.stringify({ title, due_date, priority, owner, color })
   });
 
   e.target.reset();
@@ -1049,6 +1111,7 @@ function setupFormatButtons(selector, textareaId) {
         case "italic": wrapped = `_${selected}_`; break;
         case "heading": wrapped = `\n### ${selected}\n`; break;
         case "bullet": wrapped = selected.split("\n").map((l) => `- ${l}`).join("\n"); break;
+        case "checklist": wrapped = selected.split("\n").map((l) => `- [ ] ${l}`).join("\n"); break;
         case "highlight": wrapped = `==${selected}==`; break;
         default: wrapped = selected;
       }
@@ -1062,11 +1125,25 @@ function setupFormatButtons(selector, textareaId) {
 setupFormatButtons(".fmt-btn[data-fmt]", "note-text");
 setupFormatButtons(".fmt-btn[data-fmt-edit]", "edit-note-text");
 
-function renderMarkdown(raw = "") {
-  const escaped = raw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function renderMarkdown(raw = "", noteId = "") {
+  const escaped = (raw || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const lines = escaped.split("\n");
   let html = "", inList = false;
-  lines.forEach((line) => {
+  lines.forEach((line, lineIdx) => {
+    // Interactive Checklist syntax: - [ ] or - [x]
+    const checkMatch = line.match(/^-\s+\[([ xX])\]\s*(.*)/);
+    if (checkMatch) {
+      if (inList) { html += "</ul>"; inList = false; }
+      const isChecked = checkMatch[1].toLowerCase() === "x";
+      html += `
+        <label class="checklist-item ${isChecked ? "done" : ""}" data-note-id="${noteId}" data-line-idx="${lineIdx}">
+          <input type="checkbox" class="note-checklist-cb" data-note-id="${noteId}" data-line-idx="${lineIdx}" ${isChecked ? "checked" : ""} />
+          <span>${inlineFormat(checkMatch[2])}</span>
+        </label>
+      `;
+      return;
+    }
+
     const bulletMatch = line.match(/^-\s+(.*)/);
     if (bulletMatch) {
       if (!inList) { html += "<ul>"; inList = true; }
@@ -1101,15 +1178,40 @@ function renderNotes(filterText = "") {
     clearBtn.style.display = searchInput.value ? "block" : "none";
   }
 
+  // Update notebook count in header
+  const allCountEl = document.getElementById("nb-all-count");
+  if (allCountEl) allCountEl.textContent = notes.length;
+
+  // Filter by Active Notebook / Folder
+  if (activeNotebookId && activeNotebookId !== "all") {
+    notes = notes.filter((n) => String(n.notebook_id) === String(activeNotebookId));
+  }
+
+  // Filter by Active Tag
+  if (activeTagFilter) {
+    const target = activeTagFilter.toLowerCase();
+    notes = notes.filter((n) => {
+      if (!n.tags) return false;
+      return n.tags.split(",").map(t => t.trim().toLowerCase()).includes(target);
+    });
+  }
+
+  // Search filter
   if (filterText.trim() !== "") {
     const q = filterText.toLowerCase();
-    notes = notes.filter((n) => (n.title || "").toLowerCase().includes(q) || (n.text || "").toLowerCase().includes(q));
+    notes = notes.filter((n) =>
+      (n.title || "").toLowerCase().includes(q) ||
+      (n.text || "").toLowerCase().includes(q) ||
+      (n.tags || "").toLowerCase().includes(q)
+    );
   }
 
   notes.sort((a, b) => {
     if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
     return new Date(b.updated_at) - new Date(a.updated_at);
   });
+
+  renderTagsFilterBar();
 
   const list = document.getElementById("note-list");
   if (!list) return;
@@ -1122,21 +1224,59 @@ function renderNotes(filterText = "") {
 
   notes.forEach((n) => {
     const li = document.createElement("li");
-    li.className = `note-card ${n.pinned ? "pinned" : ""}`;
+    li.className = `note-card ${n.pinned ? "pinned" : ""} ${n.color ? "color-" + n.color : ""}`;
     const authorName = n.author || "You";
+
+    // Notebook Badge
+    let folderBadgeHtml = "";
+    if (n.notebook_id) {
+      const nb = cachedNotebooks.find(b => b.id === n.notebook_id);
+      if (nb) {
+        folderBadgeHtml = `<span class="note-folder-tag" style="border-color:${nb.color || "var(--accent)"}; color:${nb.color || "var(--accent)"};">📁 ${nb.name}</span>`;
+      }
+    }
+
+    // Tags Chips
+    let tagsHtml = "";
+    if (n.tags) {
+      tagsHtml = n.tags.split(",").map(t => t.trim()).filter(Boolean).map(tag => `
+        <span class="note-tag-pill" data-tag="${tag}">#${tag}</span>
+      `).join("");
+    }
+
+    // Pins indicator
+    const notePins = cachedPins[n.id] || [];
+    let pinsIndicatorHtml = "";
+    if (notePins.length > 0) {
+      pinsIndicatorHtml = `
+        <span class="note-pins-badge" title="${notePins.length} comment pin(s) attached">
+          📌 ${notePins.length}
+        </span>
+      `;
+    }
 
     li.innerHTML = `
       <div class="note-header-row">
         <div class="note-title-wrap">
           <strong>${n.title || "Untitled Note"}</strong>
+          ${folderBadgeHtml}
+          ${pinsIndicatorHtml}
         </div>
-        <button type="button" class="pin-btn ${n.pinned ? "pinned" : ""}" data-id="${n.id}" title="${n.pinned ? "Unpin note" : "Pin to top"}">
-          ${n.pinned ? "★" : "☆"}
-        </button>
+        <div style="display:flex; align-items:center; gap:0.25rem;">
+          <button type="button" class="pin-btn ${n.pinned ? "pinned" : ""}" data-id="${n.id}" title="${n.pinned ? "Unpin note" : "Pin to top"}">
+            ${n.pinned ? "★" : "☆"}
+          </button>
+        </div>
       </div>
-      <div class="note-body">
-        ${renderMarkdown(n.text)}
+
+      ${tagsHtml ? `<div class="note-tags-row">${tagsHtml}</div>` : ""}
+
+      <div class="note-body" data-note-id="${n.id}">
+        ${renderMarkdown(n.text, n.id)}
       </div>
+
+      ${renderReactionsBar("note", n.id)}
+
       <div class="note-footer-row">
         <div class="note-author-chip">
           ${renderAvatarHTML(authorName, 20)}
@@ -1146,13 +1286,24 @@ function renderNotes(filterText = "") {
           </span>
         </div>
         <div class="note-actions">
+          <button type="button" class="secondary-btn ai-summarize-btn" data-id="${n.id}" title="AI Document Summary">
+            ✨ Summary
+          </button>
+          <button type="button" class="secondary-btn history-btn" data-id="${n.id}" title="View Revision History">
+            🕒 Revisions
+          </button>
+          <button type="button" class="ghost-btn duplicate-btn" data-id="${n.id}" title="Duplicate note">
+            📋 Copy
+          </button>
+          <button type="button" class="ghost-btn pin-comment-btn" data-id="${n.id}" title="Drop inline comment pin">
+            📌 Pin
+          </button>
           <button type="button" class="secondary-btn edit-btn" data-id="${n.id}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
             Edit
           </button>
           <button type="button" class="ghost-btn delete-btn" data-id="${n.id}" style="color:var(--rose);">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Delete
           </button>
         </div>
       </div>
@@ -1160,9 +1311,49 @@ function renderNotes(filterText = "") {
     list.appendChild(li);
   });
 
+  // Wire event handlers
   list.querySelectorAll(".edit-btn").forEach((b) => b.addEventListener("click", () => openEditNoteModal(b.dataset.id)));
   list.querySelectorAll(".delete-btn").forEach((b) => b.addEventListener("click", () => openDeleteConfirmModal(b.dataset.id)));
   list.querySelectorAll(".pin-btn").forEach((b) => b.addEventListener("click", () => togglePin(b.dataset.id)));
+  list.querySelectorAll(".duplicate-btn").forEach((b) => b.addEventListener("click", () => duplicateNote(b.dataset.id)));
+  list.querySelectorAll(".history-btn").forEach((b) => b.addEventListener("click", () => openVersionHistoryModal(b.dataset.id)));
+  list.querySelectorAll(".ai-summarize-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      const card = b.closest(".note-card");
+      if (card) summarizeNote(b.dataset.id, card);
+    });
+  });
+  list.querySelectorAll(".pin-comment-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      const card = b.closest(".note-card");
+      if (card) startPinMode(b.dataset.id, card);
+    });
+  });
+
+  // Reaction buttons
+  list.querySelectorAll(".reaction-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      toggleReaction(btn.dataset.targetType, btn.dataset.targetId, btn.dataset.emoji);
+    });
+  });
+
+  // Checklist checkboxes
+  list.querySelectorAll(".note-checklist-cb").forEach((cb) => {
+    cb.addEventListener("change", (e) => {
+      e.stopPropagation();
+      toggleNoteChecklist(cb.dataset.noteId, Number(cb.dataset.lineIdx), cb.checked);
+    });
+  });
+
+  // Tag clicks inside note cards filter notes
+  list.querySelectorAll(".note-tag-pill").forEach((tp) => {
+    tp.addEventListener("click", (e) => {
+      e.stopPropagation();
+      activeTagFilter = tp.dataset.tag;
+      renderTagsFilterBar();
+      renderNotes(document.getElementById("note-search")?.value || "");
+    });
+  });
 }
 
 function togglePin(id) {
@@ -1284,7 +1475,16 @@ async function trySyncNote(note) {
   try {
     const res = await apiFetch("/notes", {
       method: "POST",
-      body: JSON.stringify({ id: note.id, title: note.title, text: note.text, created_at: note.created_at })
+      body: JSON.stringify({
+        id: note.id,
+        title: note.title,
+        text: note.text,
+        created_at: note.created_at,
+        notebook_id: note.notebook_id || null,
+        tags: note.tags || "",
+        color: note.color || "",
+        pinned: !!note.pinned
+      })
     });
     if (res.ok) {
       const saved = await res.json();
@@ -1330,12 +1530,19 @@ document.getElementById("note-form")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   const title = document.getElementById("note-title").value;
   const text = document.getElementById("note-text").value;
+  const nbSelect = document.getElementById("note-notebook-select");
+  const assignedNbId = nbSelect && nbSelect.value ? Number(nbSelect.value) : (activeNotebookId !== "all" ? Number(activeNotebookId) : null);
+  const tagsVal = document.getElementById("note-tags-input")?.value || "";
   const now = new Date().toISOString();
   const user = getCurrentUser();
   const note = {
     id: "local-" + Date.now() + "-" + Math.random().toString(36).slice(2),
     title,
     text,
+    notebook_id: assignedNbId,
+    tags: tagsVal,
+    color: selectedNoteColor || "",
+    pinned: false,
     author: user ? user.name : "You",
     created_at: now,
     updated_at: now,
@@ -1397,6 +1604,10 @@ async function pullSharedNotes() {
           existing.text = sn.text;
           existing.updated_at = sn.updated_at;
           existing.author = sn.author;
+          existing.notebook_id = sn.notebook_id;
+          existing.tags = sn.tags;
+          existing.color = sn.color;
+          existing.pinned = !!sn.pinned;
           existing.synced = true;
           updated = true;
         }
@@ -1408,6 +1619,10 @@ async function pullSharedNotes() {
           author: sn.author,
           created_at: sn.created_at,
           updated_at: sn.updated_at,
+          notebook_id: sn.notebook_id,
+          tags: sn.tags,
+          color: sn.color,
+          pinned: !!sn.pinned,
           synced: true
         });
         updated = true;
@@ -1543,6 +1758,922 @@ document.getElementById("mobile-theme-btn")?.addEventListener("click", () => {
 
 applyTheme(localStorage.getItem(THEME_KEY) || "light");
 
+
+// ==========================================================================
+// Release 3 Implementation — Collaboration, Power-User & Notes Engine
+// ==========================================================================
+
+// --- 1. Interactive Checklists ---
+function toggleNoteChecklist(noteId, lineIdx, checked) {
+  const notes = getLocalNotes();
+  const note = notes.find((n) => n.id === noteId);
+  if (!note) return;
+  const lines = note.text.split("\n");
+  if (lines[lineIdx] !== undefined) {
+    if (checked) {
+      lines[lineIdx] = lines[lineIdx].replace(/^-\s+\\[\\s*\\]/, "- [x]");
+    } else {
+      lines[lineIdx] = lines[lineIdx].replace(/^-\s+\\[[xX]\\]/, "- [ ]");
+    }
+    note.text = lines.join("\\n");
+    note.updated_at = new Date().toISOString();
+    note.synced = false;
+    saveLocalNotes(notes);
+    renderNotes(document.getElementById("note-search")?.value || "");
+    updateSyncIndicator();
+    trySyncNote(note);
+    if (checked) fireConfetti();
+  }
+}
+
+// --- 2. Notebooks / Folders Management ---
+async function loadNotebooks() {
+  try {
+    const res = await apiFetch("/notebooks");
+    if (!res.ok) return;
+    cachedNotebooks = await res.json();
+    renderNotebooksTabs();
+    populateNotebookSelect();
+  } catch (err) {}
+}
+
+function renderNotebooksTabs() {
+  const container = document.getElementById("notebooks-tabs");
+  if (!container) return;
+  const notes = getLocalNotes();
+
+  const allCount = notes.length;
+  let tabsHtml = `
+    <button type="button" class="notebook-chip ${activeNotebookId === "all" ? "active" : ""}" data-notebook-id="all">
+      <span>📁 All Notes</span>
+      <span class="nb-count">${allCount}</span>
+    </button>
+  `;
+
+  cachedNotebooks.forEach(nb => {
+    const count = notes.filter(n => n.notebook_id === nb.id).length;
+    tabsHtml += `
+      <button type="button" class="notebook-chip ${activeNotebookId === String(nb.id) ? "active" : ""}" data-notebook-id="${nb.id}">
+        <span style="color:${nb.color || "var(--accent)"};">●</span>
+        <span>${nb.name}</span>
+        <span class="nb-count">${count}</span>
+      </button>
+    `;
+  });
+
+  container.innerHTML = tabsHtml;
+
+  container.querySelectorAll(".notebook-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      activeNotebookId = chip.dataset.notebookId;
+      renderNotebooksTabs();
+      renderNotes(document.getElementById("note-search")?.value || "");
+    });
+  });
+}
+
+function populateNotebookSelect() {
+  const select = document.getElementById("note-notebook-select");
+  if (!select) return;
+  const curVal = select.value;
+  select.innerHTML = '<option value="">No Folder (Unfiled)</option>' +
+    cachedNotebooks.map(nb => `<option value="${nb.id}">${nb.name}</option>`).join("");
+  if (curVal) select.value = curVal;
+}
+
+const createNotebookModal = document.getElementById("create-notebook-modal");
+let selectedNotebookColor = "#4F46E5";
+
+function openCreateNotebookModal() {
+  if (createNotebookModal) {
+    createNotebookModal.style.display = "flex";
+    document.getElementById("notebook-name-input")?.focus();
+  }
+}
+
+document.getElementById("new-notebook-btn")?.addEventListener("click", openCreateNotebookModal);
+document.getElementById("new-folder-header-btn")?.addEventListener("click", openCreateNotebookModal);
+document.getElementById("create-notebook-close")?.addEventListener("click", () => {
+  if (createNotebookModal) createNotebookModal.style.display = "none";
+});
+document.getElementById("create-notebook-cancel")?.addEventListener("click", () => {
+  if (createNotebookModal) createNotebookModal.style.display = "none";
+});
+
+document.querySelectorAll("#nb-color-swatches .color-swatch-dot").forEach(dot => {
+  dot.addEventListener("click", () => {
+    document.querySelectorAll("#nb-color-swatches .color-swatch-dot").forEach(d => d.classList.remove("active"));
+    dot.classList.add("active");
+    selectedNotebookColor = dot.dataset.color;
+  });
+});
+
+document.getElementById("create-notebook-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const nameInput = document.getElementById("notebook-name-input");
+  const name = nameInput?.value.trim();
+  if (!name) return;
+
+  try {
+    const res = await apiFetch("/notebooks", {
+      method: "POST",
+      body: JSON.stringify({ name, color: selectedNotebookColor })
+    });
+    if (res.ok) {
+      const created = await res.json();
+      await loadNotebooks();
+      activeNotebookId = String(created.id);
+      renderNotebooksTabs();
+      renderNotes(document.getElementById("note-search")?.value || "");
+      if (createNotebookModal) createNotebookModal.style.display = "none";
+      nameInput.value = "";
+      showToast(`Created folder "${name}" ✓`, "success");
+    }
+  } catch (err) {
+    showToast("Failed to create folder", "error");
+  }
+});
+
+// --- 3. Tags System ---
+function renderTagsFilterBar() {
+  const container = document.getElementById("tags-chips-list");
+  if (!container) return;
+  const notes = getLocalNotes();
+  const tagSet = new Set();
+
+  notes.forEach(n => {
+    if (n.tags) {
+      n.tags.split(",").forEach(t => {
+        const clean = t.trim();
+        if (clean) tagSet.add(clean);
+      });
+    }
+  });
+
+  if (tagSet.size === 0) {
+    document.getElementById("note-tags-filter-bar").style.display = "none";
+    return;
+  }
+  document.getElementById("note-tags-filter-bar").style.display = "flex";
+
+  let html = `
+    <button type="button" class="tag-chip ${activeTagFilter === "" ? "active" : ""}" data-tag="">
+      All Tags
+    </button>
+  `;
+
+  tagSet.forEach(tag => {
+    html += `
+      <button type="button" class="tag-chip ${activeTagFilter === tag ? "active" : ""}" data-tag="${tag}">
+        #${tag}
+      </button>
+    `;
+  });
+
+  container.innerHTML = html;
+
+  container.querySelectorAll(".tag-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      activeTagFilter = chip.dataset.tag;
+      renderTagsFilterBar();
+      renderNotes(document.getElementById("note-search")?.value || "");
+    });
+  });
+}
+
+// AI Suggest Tags
+document.getElementById("ai-suggest-tags-btn")?.addEventListener("click", async () => {
+  const title = document.getElementById("note-title")?.value || "";
+  const text = document.getElementById("note-text")?.value || "";
+  const tagsInput = document.getElementById("note-tags-input");
+  if (!text && !title) {
+    showToast("Write some note content first to suggest tags", "activity");
+    return;
+  }
+
+  const btn = document.getElementById("ai-suggest-tags-btn");
+  if (btn) btn.innerHTML = "<span>⏳ Analyzing…</span>";
+
+  try {
+    const res = await apiFetch("/ai/tags", {
+      method: "POST",
+      body: JSON.stringify({ title, text })
+    });
+    const data = await res.json();
+    if (data.tags && data.tags.length && tagsInput) {
+      const current = tagsInput.value.split(",").map(t => t.trim()).filter(Boolean);
+      const combined = Array.from(new Set([...current, ...data.tags]));
+      tagsInput.value = combined.join(", ");
+      showToast(`AI suggested tags: ${data.tags.map(t => "#" + t).join(" ")}`, "success");
+    }
+  } catch (err) {
+    showToast("Tag suggestion failed", "error");
+  } finally {
+    if (btn) btn.innerHTML = "<span>✨ Suggest Tags</span>";
+  }
+});
+
+// Color swatch picker for notes
+document.querySelectorAll("#note-color-swatches .color-swatch-dot").forEach(dot => {
+  dot.addEventListener("click", () => {
+    document.querySelectorAll("#note-color-swatches .color-swatch-dot").forEach(d => d.classList.remove("active"));
+    dot.classList.add("active");
+    selectedNoteColor = dot.dataset.color;
+  });
+});
+
+// --- 4. Debounced Auto-Save & Word Counter ---
+function setupNoteAutoSave() {
+  const titleInput = document.getElementById("note-title");
+  const textInput = document.getElementById("note-text");
+  const indicator = document.getElementById("note-autosave-indicator");
+  const wordCounter = document.getElementById("note-word-count");
+
+  function onInput() {
+    const words = (textInput?.value || "").trim().split(/\s+/).filter(Boolean).length;
+    if (wordCounter) wordCounter.textContent = `${words} ${words === 1 ? "word" : "words"}`;
+
+    if (indicator) {
+      indicator.textContent = "Saving…";
+      indicator.classList.add("saving");
+    }
+
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(async () => {
+      const title = titleInput?.value.trim() || "";
+      const text = textInput?.value.trim() || "";
+      if (!title && !text) {
+        if (indicator) {
+          indicator.textContent = "All changes saved ✓";
+          indicator.classList.remove("saving");
+        }
+        return;
+      }
+
+      let draftId = localStorage.getItem("wb_active_draft_id");
+      const notes = getLocalNotes();
+      let note = notes.find(n => n.id === draftId);
+      const now = new Date().toISOString();
+      const nbSelect = document.getElementById("note-notebook-select");
+      const assignedNbId = nbSelect && nbSelect.value ? Number(nbSelect.value) : (activeNotebookId !== "all" ? Number(activeNotebookId) : null);
+      const tagsVal = document.getElementById("note-tags-input")?.value || "";
+
+      if (!note) {
+        draftId = "note-" + Date.now();
+        localStorage.setItem("wb_active_draft_id", draftId);
+        note = {
+          id: draftId,
+          title: title || "Untitled Note",
+          text: text,
+          author: getCurrentUser()?.name || "You",
+          created_at: now,
+          updated_at: now,
+          synced: false,
+          notebook_id: assignedNbId,
+          tags: tagsVal,
+          color: selectedNoteColor || "",
+          pinned: false
+        };
+        notes.unshift(note);
+      } else {
+        note.title = title || "Untitled Note";
+        note.text = text;
+        note.notebook_id = assignedNbId;
+        note.tags = tagsVal;
+        note.color = selectedNoteColor || note.color;
+        note.updated_at = now;
+        note.synced = false;
+      }
+
+      saveLocalNotes(notes);
+      renderNotes(document.getElementById("note-search")?.value || "");
+      updateSyncIndicator();
+      await trySyncNote(note);
+
+      if (indicator) {
+        indicator.textContent = "All changes saved ✓";
+        indicator.classList.remove("saving");
+      }
+    }, 1500);
+  }
+
+  titleInput?.addEventListener("input", onInput);
+  textInput?.addEventListener("input", onInput);
+}
+
+// Reset draft ID on explicit form submission
+document.getElementById("note-form")?.addEventListener("submit", () => {
+  localStorage.removeItem("wb_active_draft_id");
+  const indicator = document.getElementById("note-autosave-indicator");
+  if (indicator) {
+    indicator.textContent = "All changes saved ✓";
+    indicator.classList.remove("saving");
+  }
+});
+
+// --- 5. Note Version History ---
+const versionHistoryModal = document.getElementById("version-history-modal");
+const noteVersionsList = document.getElementById("note-versions-list");
+
+async function openVersionHistoryModal(noteId) {
+  const notes = getLocalNotes();
+  const note = notes.find(n => n.id === noteId);
+  if (!versionHistoryModal || !noteVersionsList) return;
+
+  document.getElementById("history-modal-note-title").textContent = `Revisions for "${note ? (note.title || "Untitled") : "Note"}"`;
+  noteVersionsList.innerHTML = '<div style="text-align:center; padding:1.5rem; color:var(--text-muted);">Loading revision snapshots…</div>';
+  versionHistoryModal.style.display = "flex";
+
+  try {
+    const res = await apiFetch(`/notes/${noteId}/versions`);
+    if (!res.ok) throw new Error("Could not load versions");
+    const versions = await res.json();
+
+    if (versions.length === 0) {
+      noteVersionsList.innerHTML = '<div style="text-align:center; padding:2rem; color:var(--text-muted);">No recorded past versions yet. Auto-saved edits will appear here.</div>';
+      return;
+    }
+
+    noteVersionsList.innerHTML = versions.map((v, idx) => `
+      <div class="version-item-card">
+        <div class="version-item-info">
+          <strong>${v.title || "Untitled"} ${idx === 0 ? '<span class="featured-tag">LATEST</span>' : ""}</strong>
+          <span>Edited by ${v.edited_by || "User"} · ${formatRelativeTime(v.created_at)}</span>
+          <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.35rem; max-height:44px; overflow:hidden; text-overflow:ellipsis;">
+            ${(v.text || "").slice(0, 110)}…
+          </div>
+        </div>
+        <button type="button" class="secondary-btn restore-version-btn" data-note-id="${noteId}" data-version-id="${v.id}">
+          Restore
+        </button>
+      </div>
+    `).join("");
+
+    noteVersionsList.querySelectorAll(".restore-version-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          const rRes = await apiFetch(`/notes/${btn.dataset.noteId}/restore`, {
+            method: "POST",
+            body: JSON.stringify({ version_id: Number(btn.dataset.versionId) })
+          });
+          if (!rRes.ok) throw new Error("Restore failed");
+          const restored = await rRes.json();
+          const lNotes = getLocalNotes();
+          const target = lNotes.find(n => n.id === btn.dataset.noteId);
+          if (target) {
+            target.title = restored.title;
+            target.text = restored.text;
+            target.tags = restored.tags;
+            target.notebook_id = restored.notebook_id;
+            target.updated_at = restored.updated_at;
+            saveLocalNotes(lNotes);
+            renderNotes(document.getElementById("note-search")?.value || "");
+          }
+          versionHistoryModal.style.display = "none";
+          showToast("Restored note to selected revision ✓", "success");
+        } catch (err) {
+          showToast("Failed to restore version", "error");
+        }
+      });
+    });
+  } catch (err) {
+    noteVersionsList.innerHTML = '<div style="color:var(--rose); padding:1rem;">Failed to fetch revisions.</div>';
+  }
+}
+
+document.getElementById("version-history-close")?.addEventListener("click", () => {
+  if (versionHistoryModal) versionHistoryModal.style.display = "none";
+});
+
+// --- 6. Duplicate Note Action ---
+function duplicateNote(id) {
+  const notes = getLocalNotes();
+  const note = notes.find(n => n.id === id);
+  if (!note) return;
+
+  const now = new Date().toISOString();
+  const newNote = {
+    ...note,
+    id: "note-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5),
+    title: `${note.title || "Untitled Note"} (Copy)`,
+    created_at: now,
+    updated_at: now,
+    synced: false
+  };
+
+  notes.unshift(newNote);
+  saveLocalNotes(notes);
+  renderNotes(document.getElementById("note-search")?.value || "");
+  updateSyncIndicator();
+  trySyncNote(newNote);
+  showToast("Note duplicated successfully ✓", "success");
+}
+
+// --- 7. AI Summarize Action ---
+async function summarizeNote(noteId, containerEl) {
+  const notes = getLocalNotes();
+  const note = notes.find(n => n.id === noteId);
+  if (!note) return;
+
+  let summaryBox = containerEl.querySelector(".note-ai-summary-box");
+  if (summaryBox) {
+    summaryBox.remove();
+    return;
+  }
+
+  summaryBox = document.createElement("div");
+  summaryBox.className = "note-ai-summary-box";
+  summaryBox.innerHTML = `
+    <div class="note-ai-summary-header">
+      <span>✨ Generating AI Summary…</span>
+    </div>
+    <div style="color:var(--text-muted); font-size:0.78rem;">Analyzing document structure…</div>
+  `;
+  containerEl.appendChild(summaryBox);
+
+  try {
+    const res = await apiFetch("/ai/summarize", {
+      method: "POST",
+      body: JSON.stringify({ title: note.title, text: note.text })
+    });
+    if (!res.ok) throw new Error("Summarization failed");
+    const data = await res.json();
+
+    summaryBox.innerHTML = `
+      <div class="note-ai-summary-header">
+        <span>✨ AI Executive Summary</span>
+        <span class="role-pill-badge" style="font-size:0.6rem;">${data.model || "GenAI"}</span>
+      </div>
+      <div class="note-ai-summary-text" style="white-space:pre-line;">${renderMarkdown(data.summary)}</div>
+    `;
+  } catch (err) {
+    summaryBox.innerHTML = '<div style="color:var(--rose); font-size:0.75rem;">Could not generate summary.</div>';
+  }
+}
+
+// --- 8. Emoji Reactions (Notes & Comments) ---
+async function loadReactions() {
+  try {
+    const res = await apiFetch("/reactions");
+    if (!res.ok) return;
+    cachedReactions = await res.json();
+  } catch (err) {}
+}
+
+async function toggleReaction(targetType, targetId, emoji) {
+  try {
+    const res = await apiFetch("/reactions", {
+      method: "POST",
+      body: JSON.stringify({ target_type: targetType, target_id: String(targetId), emoji })
+    });
+    if (!res.ok) return;
+    await loadReactions();
+    if (targetType === "note") renderNotes(document.getElementById("note-search")?.value || "");
+    if (targetType === "comment") loadComments();
+  } catch (err) {
+    showToast("Could not record reaction", "error");
+  }
+}
+
+function renderReactionsBar(targetType, targetId) {
+  const currentUserId = getCurrentUser()?.id;
+  const emojis = ["👍", "❤️", "🎉", "🚀", "👀"];
+  const itemReactions = cachedReactions.filter(r => r.target_type === targetType && String(r.target_id) === String(targetId));
+
+  const pillsHTML = emojis.map(em => {
+    const matches = itemReactions.filter(r => r.emoji === em);
+    const userReacted = matches.some(r => r.user_id === currentUserId);
+    const count = matches.length;
+    return `
+      <button type="button" class="reaction-pill ${userReacted ? "user-reacted" : ""}" data-target-type="${targetType}" data-target-id="${targetId}" data-emoji="${em}">
+        <span>${em}</span>
+        ${count > 0 ? `<b style="font-size:0.7rem;">${count}</b>` : ""}
+      </button>
+    `;
+  }).join("");
+
+  return `<div class="note-reactions-bar">${pillsHTML}</div>`;
+}
+
+// --- 9. Live Presence & Figma-inspired Avatars ---
+async function sendPresenceHeartbeat() {
+  const group = getCurrentGroup();
+  if (!group || !getToken()) return;
+
+  try {
+    await apiFetch("/presence/heartbeat", {
+      method: "POST",
+      body: JSON.stringify({ current_tab: currentActiveTab })
+    });
+    const res = await apiFetch("/presence");
+    if (!res.ok) return;
+    const activeUsers = await res.json();
+    renderPresenceStack(activeUsers);
+  } catch (err) {}
+}
+
+function renderPresenceStack(users) {
+  const container = document.getElementById("presence-avatars-list");
+  if (!container) return;
+
+  if (!users || users.length === 0) {
+    container.innerHTML = '<span style="font-size:0.75rem; color:var(--text-dim);">Solo</span>';
+    return;
+  }
+
+  container.innerHTML = users.slice(0, 5).map(u => `
+    <div class="presence-avatar-pill" style="background:${getAvatarColor(u.name)};" title="${u.name} (active on ${u.current_tab || "overview"})\">
+      <span>${getInitials(u.name)}</span>
+      <span class="presence-online-dot"></span>
+    </div>
+  `).join("");
+}
+
+// --- 10. Command Palette (Ctrl+K) & Global Search ---
+const cmdPaletteModal = document.getElementById("command-palette-modal");
+const cmdInput = document.getElementById("command-input");
+const cmdActionsList = document.getElementById("command-actions-list");
+const cmdResultsList = document.getElementById("command-results-list");
+const cmdActionsSection = document.getElementById("cmd-actions-section");
+const cmdResultsSection = document.getElementById("cmd-results-section");
+
+const PALETTE_ACTIONS = [
+  { id: "new-note", label: "Create New Note", shortcut: "N", category: "Action", icon: "📝", run: () => { switchTab("notes"); setTimeout(() => document.getElementById("note-title")?.focus(), 50); } },
+  { id: "new-task", label: "Create New Task", shortcut: "T", category: "Action", icon: "📋", run: () => { switchTab("tasks"); setTimeout(() => document.getElementById("task-title")?.focus(), 50); } },
+  { id: "new-folder", label: "Create New Folder", category: "Action", icon: "📁", run: () => openCreateNotebookModal() },
+  { id: "focus-mode", label: "Toggle Focus Mode (Fullscreen)", shortcut: "F", category: "View", icon: "🎯", run: () => toggleFocusMode() },
+  { id: "tab-dashboard", label: "Jump to Overview Dashboard", shortcut: "1", category: "Navigation", icon: "📊", run: () => switchTab("dashboard") },
+  { id: "tab-notes", label: "Jump to Notes", shortcut: "2", category: "Navigation", icon: "📓", run: () => switchTab("notes") },
+  { id: "tab-tasks", label: "Jump to Tasks", shortcut: "3", category: "Navigation", icon: "✅", run: () => switchTab("tasks") },
+  { id: "tab-milestones", label: "Jump to Milestones", shortcut: "4", category: "Navigation", icon: "🏁", run: () => switchTab("milestones") },
+  { id: "tab-comments", label: "Jump to Comments", shortcut: "5", category: "Navigation", icon: "💬", run: () => switchTab("comments") },
+  { id: "tab-activity", label: "Jump to Activity Timeline", shortcut: "6", category: "Navigation", icon: "⚡", run: () => switchTab("activity") },
+  { id: "workspace-members", label: "Manage Workspace Members & Roles", shortcut: "M", category: "Team", icon: "👥", run: () => openWorkspaceManagementModal() },
+  { id: "toggle-theme", label: "Toggle Dark / Light Theme", shortcut: "Alt+T", category: "Preferences", icon: "🌙", run: () => { const cur = document.body.getAttribute("data-theme") === "dark" ? "light" : "dark"; applyTheme(cur); } },
+  { id: "export-notes", label: "Export Notes to File", category: "Tools", icon: "💾", run: () => document.getElementById("export-notes-btn")?.click() },
+  { id: "open-shortcuts", label: "Keyboard Shortcuts Reference", shortcut: "?", category: "Help", icon: "⌨️", run: () => openShortcutsModal() },
+  { id: "switch-workspace", label: "Switch or Create Workspace", category: "Team", icon: "🔄", run: () => document.getElementById("switch-group-btn")?.click() }
+];
+
+let activeCmdIndex = 0;
+let cmdSearchResults = [];
+
+function openCommandPalette() {
+  if (!cmdPaletteModal) return;
+  cmdPaletteModal.style.display = "flex";
+  cmdInput.value = "";
+  renderCommandActions("");
+  cmdInput.focus();
+}
+
+function closeCommandPalette() {
+  if (cmdPaletteModal) cmdPaletteModal.style.display = "none";
+}
+
+document.getElementById("open-command-palette-btn")?.addEventListener("click", openCommandPalette);
+
+function renderCommandActions(query = "") {
+  if (!cmdActionsList) return;
+  const q = query.toLowerCase().trim();
+  const filtered = PALETTE_ACTIONS.filter(a => a.label.toLowerCase().includes(q) || a.category.toLowerCase().includes(q));
+
+  if (filtered.length === 0 && !q) {
+    cmdActionsSection.style.display = "none";
+    return;
+  }
+  cmdActionsSection.style.display = "block";
+
+  cmdActionsList.innerHTML = filtered.map((a, idx) => `
+    <div class="cmd-item ${idx === activeCmdIndex ? "active" : ""}" data-action-id="${a.id}">
+      <div class="cmd-item-left">
+        <span>${a.icon}</span>
+        <span>${a.label}</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.4rem;">
+        <span class="cmd-badge-type">${a.category}</span>
+        ${a.shortcut ? `<kbd style="font-size:0.65rem; padding:0.1rem 0.35rem; background:var(--bg-subtle); border-radius:4px;">${a.shortcut}</kbd>` : ""}
+      </div>
+    </div>
+  `).join("");
+
+  cmdActionsList.querySelectorAll(".cmd-item").forEach(item => {
+    item.addEventListener("click", () => {
+      const action = PALETTE_ACTIONS.find(a => a.id === item.dataset.actionId);
+      if (action) {
+        closeCommandPalette();
+        action.run();
+      }
+    });
+  });
+}
+
+let cmdSearchTimer = null;
+cmdInput?.addEventListener("input", (e) => {
+  const val = e.target.value;
+  activeCmdIndex = 0;
+  renderCommandActions(val);
+
+  if (val.trim().length >= 2) {
+    if (cmdSearchTimer) clearTimeout(cmdSearchTimer);
+    cmdSearchTimer = setTimeout(() => performGlobalSearch(val.trim()), 200);
+  } else {
+    cmdResultsSection.style.display = "none";
+  }
+});
+
+async function performGlobalSearch(query) {
+  try {
+    const res = await apiFetch(`/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    cmdSearchResults = [];
+
+    (data.notes || []).forEach(n => cmdSearchResults.push({ type: "note", title: n.title || "Untitled Note", sub: n.tags ? "#" + n.tags : "Note", target: "notes" }));
+    (data.tasks || []).forEach(t => cmdSearchResults.push({ type: "task", title: t.title, sub: "Task · " + t.priority, target: "tasks" }));
+    (data.milestones || []).forEach(m => cmdSearchResults.push({ type: "milestone", title: m.title, sub: "Milestone · Due " + m.due_date, target: "milestones" }));
+    (data.comments || []).forEach(c => cmdSearchResults.push({ type: "comment", title: c.text, sub: "Comment on " + c.workitem_name, target: "comments" }));
+
+    if (cmdSearchResults.length === 0) {
+      cmdResultsSection.style.display = "block";
+      cmdResultsList.innerHTML = '<div style="padding:0.75rem; color:var(--text-muted); font-size:0.82rem;">No matching items found.</div>';
+      return;
+    }
+
+    cmdResultsSection.style.display = "block";
+    cmdResultsList.innerHTML = cmdSearchResults.slice(0, 8).map(r => `
+      <div class="cmd-item" data-search-target="${r.target}">
+        <div class="cmd-item-left">
+          <span>${r.type === "note" ? "📓" : r.type === "task" ? "✅" : r.type === "milestone" ? "🏁" : "💬"}</span>
+          <div>
+            <div style="font-weight:600; font-size:0.82rem; color:var(--text-primary);">${r.title}</div>
+            <div style="font-size:0.7rem; color:var(--text-muted);">${r.sub}</div>
+          </div>
+        </div>
+        <span class="cmd-badge-type">${r.type}</span>
+      </div>
+    `).join("");
+
+    cmdResultsList.querySelectorAll(".cmd-item").forEach(item => {
+      item.addEventListener("click", () => {
+        closeCommandPalette();
+        switchTab(item.dataset.searchTarget);
+      });
+    });
+  } catch (err) {}
+}
+
+cmdInput?.addEventListener("keydown", (e) => {
+  const items = cmdActionsList?.querySelectorAll(".cmd-item") || [];
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    activeCmdIndex = (activeCmdIndex + 1) % Math.max(1, items.length);
+    items.forEach((it, idx) => it.classList.toggle("active", idx === activeCmdIndex));
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    activeCmdIndex = (activeCmdIndex - 1 + items.length) % Math.max(1, items.length);
+    items.forEach((it, idx) => it.classList.toggle("active", idx === activeCmdIndex));
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (items[activeCmdIndex]) {
+      items[activeCmdIndex].click();
+    }
+  } else if (e.key === "Escape") {
+    closeCommandPalette();
+  }
+});
+
+// --- 11. Fullscreen Focus Mode ---
+const focusOverlay = document.getElementById("focus-mode-overlay");
+const focusNoteTitle = document.getElementById("focus-note-title");
+const focusNoteTextarea = document.getElementById("focus-note-textarea");
+const focusWordCount = document.getElementById("focus-word-count");
+
+function toggleFocusMode() {
+  if (focusModeActive) exitFocusMode();
+  else enterFocusMode();
+}
+
+function enterFocusMode() {
+  if (!focusOverlay) return;
+  focusModeActive = true;
+  focusOverlay.style.display = "flex";
+
+  const mainTitle = document.getElementById("note-title")?.value || "Untitled Note";
+  const mainText = document.getElementById("note-text")?.value || "";
+
+  if (focusNoteTitle) focusNoteTitle.textContent = mainTitle;
+  if (focusNoteTextarea) {
+    focusNoteTextarea.value = mainText;
+    focusNoteTextarea.focus();
+  }
+  updateFocusWordCount();
+}
+
+function exitFocusMode() {
+  if (!focusOverlay) return;
+  focusModeActive = false;
+  focusOverlay.style.display = "none";
+
+  const updatedText = focusNoteTextarea?.value || "";
+  const mainText = document.getElementById("note-text");
+  if (mainText) {
+    mainText.value = updatedText;
+    mainText.dispatchEvent(new Event("input"));
+  }
+}
+
+function updateFocusWordCount() {
+  const words = (focusNoteTextarea?.value || "").trim().split(/\s+/).filter(Boolean).length;
+  if (focusWordCount) focusWordCount.textContent = `${words} ${words === 1 ? "word" : "words"}`;
+}
+
+focusNoteTextarea?.addEventListener("input", () => {
+  updateFocusWordCount();
+  const mainText = document.getElementById("note-text");
+  if (mainText) {
+    mainText.value = focusNoteTextarea.value;
+    mainText.dispatchEvent(new Event("input"));
+  }
+});
+
+document.getElementById("focus-mode-toggle")?.addEventListener("click", toggleFocusMode);
+document.getElementById("composer-focus-btn")?.addEventListener("click", enterFocusMode);
+document.getElementById("exit-focus-btn")?.addEventListener("click", exitFocusMode);
+
+// --- 12. Workspace Management Modal (Admin & Members) ---
+const workspaceMgmtModal = document.getElementById("workspace-management-modal");
+
+async function openWorkspaceManagementModal() {
+  const group = getCurrentGroup();
+  if (!workspaceMgmtModal || !group) return;
+
+  workspaceMgmtModal.style.display = "flex";
+  document.getElementById("modal-workspace-code").textContent = group.code;
+  const myRoleBadge = document.getElementById("my-role-badge");
+  const dangerZone = document.getElementById("admin-danger-zone");
+  const isAdmin = group.role === "admin" || group.is_admin;
+
+  if (myRoleBadge) {
+    myRoleBadge.textContent = isAdmin ? "Admin" : "Member";
+    myRoleBadge.className = `role-pill-badge ${isAdmin ? "admin" : ""}`;
+  }
+  if (dangerZone) dangerZone.style.display = isAdmin ? "flex" : "none";
+
+  const list = document.getElementById("workspace-members-list");
+  list.innerHTML = '<li style="text-align:center; padding:1rem; color:var(--text-muted);">Loading members…</li>';
+
+  try {
+    const res = await apiFetch(`/groups/${group.id}/members`);
+    if (!res.ok) throw new Error("Could not load members");
+    const members = await res.json();
+
+    list.innerHTML = members.map(m => `
+      <li class="member-entry-row">
+        <div class="member-info-col">
+          ${renderAvatarHTML(m.name, 28)}
+          <div>
+            <div style="font-weight:600; font-size:0.85rem; color:var(--text-primary); display:flex; align-items:center; gap:0.4rem;">
+              <span>${m.name}</span>
+              ${m.is_online ? '<span class="presence-online-dot" style="position:static; display:inline-block;"></span>' : ""}
+            </div>
+            <span style="font-size:0.72rem; color:var(--text-muted);">@${m.username}</span>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <span class="role-pill-badge ${m.role === "admin" ? "admin" : ""}">${m.role}</span>
+          ${isAdmin && m.id !== getCurrentUser()?.id ? `
+            <button type="button" class="icon-action-btn remove-member-btn" data-user-id="${m.id}" data-user-name="${m.name}" title="Remove from workspace" style="color:var(--rose);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          ` : ""}
+        </div>
+      </li>
+    `).join("");
+
+    list.querySelectorAll(".remove-member-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (!confirm(`Are you sure you want to remove ${btn.dataset.userName} from this workspace?`)) return;
+        try {
+          const remRes = await apiFetch(`/groups/${group.id}/members/${btn.dataset.userId}`, { method: "DELETE" });
+          if (!remRes.ok) throw new Error("Failed to remove member");
+          showToast(`Removed ${btn.dataset.userName}`, "success");
+          openWorkspaceManagementModal();
+        } catch (err) {
+          showToast("Could not remove member", "error");
+        }
+      });
+    });
+  } catch (err) {
+    list.innerHTML = '<li style="color:var(--rose); padding:1rem;">Failed to load members.</li>';
+  }
+}
+
+document.getElementById("open-workspace-mgmt-btn")?.addEventListener("click", openWorkspaceManagementModal);
+document.getElementById("workspace-mgmt-close")?.addEventListener("click", () => {
+  if (workspaceMgmtModal) workspaceMgmtModal.style.display = "none";
+});
+
+document.getElementById("modal-copy-code-btn")?.addEventListener("click", (e) => {
+  const group = getCurrentGroup();
+  if (group) copyToClipboard(group.code, e.currentTarget);
+});
+
+document.getElementById("delete-workspace-btn")?.addEventListener("click", async () => {
+  const group = getCurrentGroup();
+  if (!group) return;
+  if (!confirm(`DANGER: Are you sure you want to permanently delete "${group.name}"? All notes, tasks, and data will be erased.`)) return;
+
+  try {
+    const res = await apiFetch(`/groups/${group.id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Delete failed");
+    clearCurrentGroup();
+    workspaceMgmtModal.style.display = "none";
+    boot();
+    showToast("Workspace deleted permanently", "activity");
+  } catch (err) {
+    showToast("Failed to delete workspace", "error");
+  }
+});
+
+// --- 13. Inline Comment Pins (Figma-inspired) ---
+const pinPopover = document.getElementById("pin-comment-popover");
+let activePinCoords = { x: 50, y: 50 };
+
+async function loadPinsForNote(noteId) {
+  try {
+    const res = await apiFetch(`/notes/${noteId}/pins`);
+    if (!res.ok) return [];
+    const pins = await res.json();
+    cachedPins[noteId] = pins;
+    return pins;
+  } catch (err) {
+    return [];
+  }
+}
+
+function startPinMode(noteId, cardEl) {
+  activePinNoteId = noteId;
+  showToast("Click anywhere on the note text to drop an inline comment pin", "activity");
+
+  const bodyEl = cardEl.querySelector(".note-body");
+  if (!bodyEl) return;
+  bodyEl.style.cursor = "crosshair";
+
+  function onBodyClick(e) {
+    const rect = bodyEl.getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+    activePinCoords = { x, y };
+
+    bodyEl.style.cursor = "default";
+    bodyEl.removeEventListener("click", onBodyClick);
+
+    // Position popover
+    if (pinPopover) {
+      pinPopover.style.display = "block";
+      pinPopover.style.left = `${Math.min(window.innerWidth - 300, Math.max(20, e.clientX))}px`;
+      pinPopover.style.top = `${Math.min(window.innerHeight - 180, Math.max(20, e.clientY + 10))}px`;
+      document.getElementById("pin-popover-title").textContent = "New Comment Pin";
+      document.getElementById("pin-popover-content").innerHTML = `<span style="color:var(--text-muted);">Pin at ${x}% across note</span>`;
+      document.getElementById("pin-comment-input")?.focus();
+    }
+  }
+
+  bodyEl.addEventListener("click", onBodyClick, { once: true });
+}
+
+document.getElementById("pin-popover-close")?.addEventListener("click", () => {
+  if (pinPopover) pinPopover.style.display = "none";
+  activePinNoteId = null;
+});
+
+document.getElementById("pin-comment-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = document.getElementById("pin-comment-input");
+  const text = input?.value.trim();
+  if (!text || !activePinNoteId) return;
+
+  try {
+    const res = await apiFetch(`/notes/${activePinNoteId}/pins`, {
+      method: "POST",
+      body: JSON.stringify({
+        text,
+        pin_x: activePinCoords.x,
+        pin_y: activePinCoords.y
+      })
+    });
+    if (res.ok) {
+      await loadPinsForNote(activePinNoteId);
+      renderNotes(document.getElementById("note-search")?.value || "");
+      if (pinPopover) pinPopover.style.display = "none";
+      input.value = "";
+      showToast("Comment pin attached ✓", "success");
+    }
+  } catch (err) {
+    showToast("Failed to attach pin", "error");
+  }
+});
+
 // ================= Keyboard Shortcuts Modal & Handler =================
 const shortcutsModal = document.getElementById("shortcuts-modal");
 
@@ -1572,7 +2703,28 @@ window.addEventListener("keydown", (e) => {
   const isInputActive = activeTag === "input" || activeTag === "textarea" || activeTag === "select";
 
   if (!isInputActive) {
-    if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+    // Ctrl+K / Cmd+K triggers Command Palette
+  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+    e.preventDefault();
+    openCommandPalette();
+    return;
+  }
+
+  // F toggles Focus Mode
+  if (!isInputActive && (e.key === "f" || e.key === "F")) {
+    e.preventDefault();
+    toggleFocusMode();
+    return;
+  }
+
+  // M opens Workspace Members
+  if (!isInputActive && (e.key === "m" || e.key === "M")) {
+    e.preventDefault();
+    openWorkspaceManagementModal();
+    return;
+  }
+
+  if (e.key === "?" || (e.shiftKey && e.key === "/")) {
       e.preventDefault();
       openShortcutsModal();
       return;
@@ -1679,6 +2831,10 @@ async function enterApp() {
   lastActivityCheck = new Date().toISOString();
 
   await loadWorkItems();
+  await loadNotebooks();
+  await loadReactions();
+  await sendPresenceHeartbeat();
+  setupNoteAutoSave();
   loadDashboard();
   loadTasks();
   loadMilestones();
@@ -1697,6 +2853,9 @@ async function enterApp() {
     loadWorkItems();
     loadComments();
     pullSharedNotes();
+    loadNotebooks();
+    loadReactions();
+    sendPresenceHeartbeat();
     checkActivity();
   }, 8000);
 }

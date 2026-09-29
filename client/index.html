@@ -374,6 +374,39 @@
 
     <!-- Main Content Area -->
     <main class="main-viewport">
+      
+      <!-- Premium Sticky Topbar (Global Search, Presence & Tools) -->
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <button type="button" class="command-palette-trigger" id="open-command-palette-btn" title="Command Palette (Ctrl+K)">
+            <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <span class="cmd-trigger-text">Search or jump to...</span>
+            <span class="cmd-shortcut-badge"><kbd>Ctrl</kbd> <kbd>K</kbd></span>
+          </button>
+        </div>
+        <div class="topbar-right">
+          <!-- Active Presence Avatars Stack (Figma style) -->
+          <div class="presence-stack-container" id="presence-stack-container" title="Active collaborators in this workspace">
+            <span class="presence-label">Live:</span>
+            <div class="presence-avatars" id="presence-avatars-list">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <div class="topbar-divider"></div>
+
+          <!-- Focus Mode Toggle Button -->
+          <button type="button" class="topbar-icon-btn" id="focus-mode-toggle" title="Toggle Distraction-free Focus Mode (F)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+
+          <!-- Workspace Management Settings Button -->
+          <button type="button" class="topbar-icon-btn" id="open-workspace-mgmt-btn" title="Workspace Members & Roles">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </button>
+        </div>
+      </header>
+
       <div class="tab-content-wrap">
 
         <!-- ================= Tab 1: Dashboard ================= -->
@@ -522,12 +555,64 @@
               <h1>Notes</h1>
               <p class="tab-sub">Offline-first notes. Saved instantly locally and synced to your group. <span id="sync-indicator" class="sync-status-indicator"></span></p>
             </div>
+            <div class="header-actions">
+              <button type="button" class="secondary-btn" id="new-folder-header-btn">
+                <span>📁 New Folder</span>
+              </button>
+            </div>
           </header>
+
+          <!-- Notebooks / Folders Navigation Bar -->
+          <div class="notebooks-bar-container">
+            <div class="notebooks-scroll" id="notebooks-tabs">
+              <button type="button" class="notebook-chip active" data-notebook-id="all">
+                <span>📁 All Notes</span>
+                <span class="nb-count" id="nb-all-count">0</span>
+              </button>
+              <!-- Dynamically populated folders -->
+            </div>
+            <button type="button" class="new-notebook-btn" id="new-notebook-btn" title="Create New Folder">
+              <span>+ New Folder</span>
+            </button>
+          </div>
+
+          <!-- Tags Filter Bar -->
+          <div class="tags-filter-container" id="note-tags-filter-bar">
+            <span class="tags-filter-label">Tags:</span>
+            <div class="tags-chips-list" id="tags-chips-list">
+              <!-- Dynamically populated tag chips -->
+            </div>
+          </div>
 
           <!-- Note Composer -->
           <form id="note-form" class="composer-card">
             <div class="composer-header">
               <input type="text" id="note-title" placeholder="Note Title (e.g. Architecture Decisions)" class="seamless-title-input" />
+              <div class="composer-meta-controls">
+                <select id="note-notebook-select" class="clean-select-sm" title="Assign to folder">
+                  <option value="">No Folder (Unfiled)</option>
+                </select>
+                <div class="color-swatches" id="note-color-swatches" title="Color label">
+                  <button type="button" class="color-swatch-dot active" data-color="" title="Default"></button>
+                  <button type="button" class="color-swatch-dot" data-color="indigo" style="background:#4F46E5" title="Indigo"></button>
+                  <button type="button" class="color-swatch-dot" data-color="emerald" style="background:#059669" title="Emerald"></button>
+                  <button type="button" class="color-swatch-dot" data-color="amber" style="background:#D97706" title="Amber"></button>
+                  <button type="button" class="color-swatch-dot" data-color="rose" style="background:#DC2626" title="Rose"></button>
+                  <button type="button" class="color-swatch-dot" data-color="purple" style="background:#7C3AED" title="Purple"></button>
+                  <button type="button" class="color-swatch-dot" data-color="sky" style="background:#0284C7" title="Sky"></button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tags row -->
+            <div class="composer-tags-row">
+              <div class="tag-input-wrap">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                <input type="text" id="note-tags-input" placeholder="Tags (comma-separated, e.g. architecture, specs)" />
+              </div>
+              <button type="button" class="ai-pill-btn" id="ai-suggest-tags-btn" title="AI Suggest Tags based on content">
+                <span>✨ Suggest Tags</span>
+              </button>
             </div>
 
             <div class="format-toolbar" role="toolbar" aria-label="Text Formatting">
@@ -543,21 +628,31 @@
               <button type="button" class="fmt-btn" data-fmt="bullet" title="Bullet List">
                 <span>• List</span>
               </button>
+              <button type="button" class="fmt-btn" data-fmt="checklist" title="Checklist Task (- [ ])">
+                <span>☑ Task</span>
+              </button>
               <button type="button" class="fmt-btn" data-fmt="highlight" title="Highlight Text">
                 <mark>Highlight</mark>
               </button>
             </div>
 
-            <textarea id="note-text" placeholder="Write markdown note here… Works seamlessly even without internet connection." rows="4" required></textarea>
+            <textarea id="note-text" placeholder="Write markdown note here… Checklists syntax: - [ ] task item. Auto-saves while typing." rows="4" required></textarea>
 
             <div class="composer-footer">
-              <div class="keyboard-tip">
-                <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to save instantly
+              <div class="composer-left-indicators">
+                <span class="autosave-pill" id="note-autosave-indicator">All changes saved ✓</span>
+                <span class="word-counter-pill" id="note-word-count">0 words</span>
               </div>
-              <button type="submit" class="primary-btn">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                <span>Save Note</span>
-              </button>
+              <div class="composer-right-actions">
+                <button type="button" class="ghost-btn-sm" id="composer-focus-btn" title="Focus Mode">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                  <span>Focus Mode</span>
+                </button>
+                <button type="submit" class="primary-btn">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  <span>Save Note</span>
+                </button>
+              </div>
             </div>
           </form>
 
@@ -614,6 +709,18 @@
               <div class="input-wrap">
                 <label for="task-owner" class="field-label-sm">Assignee</label>
                 <input type="text" id="task-owner" placeholder="Defaults to you" />
+              </div>
+              <div class="input-wrap">
+                <label for="task-color" class="field-label-sm">Color Tag</label>
+                <select id="task-color">
+                  <option value="">No Color</option>
+                  <option value="rose">Rose (Urgent)</option>
+                  <option value="amber">Amber (Warning)</option>
+                  <option value="indigo">Indigo (Core)</option>
+                  <option value="emerald">Emerald (Success)</option>
+                  <option value="purple">Purple (Design)</option>
+                  <option value="sky">Sky (Research)</option>
+                </select>
               </div>
               <div class="input-wrap btn-wrap-bottom">
                 <button type="submit" class="primary-btn">
@@ -831,6 +938,14 @@
       </div>
       <div class="shortcuts-grid">
         <div class="shortcut-row">
+          <span class="shortcut-desc">Open Command Palette / Search</span>
+          <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>K</kbd></span>
+        </div>
+        <div class="shortcut-row">
+          <span class="shortcut-desc">Toggle Focus Mode (Fullscreen)</span>
+          <span class="shortcut-keys"><kbd>F</kbd></span>
+        </div>
+        <div class="shortcut-row">
           <span class="shortcut-desc">Quick-save note</span>
           <span class="shortcut-keys"><kbd>Ctrl</kbd> + <kbd>Enter</kbd></span>
         </div>
@@ -855,7 +970,7 @@
           <span class="shortcut-keys"><kbd>Alt</kbd> + <kbd>T</kbd></span>
         </div>
         <div class="shortcut-row">
-          <span class="shortcut-desc">Close dialog / modal / drawer</span>
+          <span class="shortcut-desc">Close dialog / modal / drawer / focus</span>
           <span class="shortcut-keys"><kbd>Esc</kbd></span>
         </div>
         <div class="shortcut-row">
@@ -864,6 +979,146 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- ===== Command Palette Modal (Ctrl+K) ===== -->
+  <div id="command-palette-modal" class="modal-backdrop cmd-palette-backdrop" style="display:none" role="dialog" aria-modal="true" aria-label="Command Palette">
+    <div class="cmd-palette-card">
+      <div class="cmd-input-wrap">
+        <svg class="cmd-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="command-input" placeholder="Type a command or search workspace... (Esc to exit)" autocomplete="off" />
+        <span class="cmd-badge"><kbd>Esc</kbd></span>
+      </div>
+      <div class="cmd-palette-body" id="command-palette-body">
+        <div class="cmd-section" id="cmd-actions-section">
+          <div class="cmd-section-title">QUICK ACTIONS & NAVIGATION</div>
+          <div class="cmd-list" id="command-actions-list">
+            <!-- Dynamically populated or static actions -->
+          </div>
+        </div>
+        <div class="cmd-section" id="cmd-results-section" style="display:none">
+          <div class="cmd-section-title">GLOBAL SEARCH RESULTS</div>
+          <div class="cmd-list" id="command-results-list"></div>
+        </div>
+      </div>
+      <div class="cmd-footer">
+        <span><kbd>↑</kbd> <kbd>↓</kbd> to navigate</span>
+        <span><kbd>↵</kbd> to select</span>
+        <span><kbd>Esc</kbd> to close</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Workspace Management Modal ===== -->
+  <div id="workspace-management-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="workspace-mgmt-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-header-with-badge">
+          <h2 id="workspace-mgmt-title">Workspace Members</h2>
+          <span class="role-pill-badge" id="my-role-badge">Member</span>
+        </div>
+        <button type="button" class="modal-close-btn" id="workspace-mgmt-close" aria-label="Close modal">✕</button>
+      </div>
+      <p class="modal-sub-text">Collaborators with access to this workspace. Admins can manage members and workspace lifecycle.</p>
+      
+      <div class="workspace-code-banner">
+        <span>Invite Code:</span>
+        <strong id="modal-workspace-code">WB-XXXXX</strong>
+        <button type="button" class="code-copy-btn" id="modal-copy-code-btn">Copy</button>
+      </div>
+
+      <div class="members-list-container">
+        <ul id="workspace-members-list" class="members-entry-list"></ul>
+      </div>
+
+      <div class="admin-danger-zone" id="admin-danger-zone" style="display:none">
+        <div class="danger-zone-header">
+          <strong>Danger Zone (Admin Only)</strong>
+          <p>Permanently delete this workspace and all associated notes, tasks, and data.</p>
+        </div>
+        <button type="button" class="danger-btn" id="delete-workspace-btn">Delete Workspace</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Note Version History Modal ===== -->
+  <div id="version-history-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="history-modal-title">Note Version History</h2>
+        <button type="button" class="modal-close-btn" id="version-history-close" aria-label="Close modal">✕</button>
+      </div>
+      <p class="modal-sub-text" id="history-modal-note-title">Review past revisions and restore any snapshot.</p>
+      <div class="versions-timeline" id="note-versions-list">
+        <!-- Dynamically populated version snapshots -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Create Notebook / Folder Modal ===== -->
+  <div id="create-notebook-modal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="new-nb-title">
+    <div class="modal-card modal-card-sm">
+      <div class="modal-header">
+        <h2 id="new-nb-title">Create Notebook Folder</h2>
+        <button type="button" class="modal-close-btn" id="create-notebook-close" aria-label="Close modal">✕</button>
+      </div>
+      <form id="create-notebook-form" class="modal-form">
+        <div class="input-group">
+          <label for="notebook-name-input" class="field-label-sm">Folder Name</label>
+          <input type="text" id="notebook-name-input" placeholder="e.g. Design Specs, Sprints" required />
+        </div>
+        <div class="input-group">
+          <label class="field-label-sm">Color Tag</label>
+          <div class="color-swatches" id="nb-color-swatches">
+            <button type="button" class="color-swatch-dot active" data-color="#4F46E5" style="background:#4F46E5"></button>
+            <button type="button" class="color-swatch-dot" data-color="#059669" style="background:#059669"></button>
+            <button type="button" class="color-swatch-dot" data-color="#D97706" style="background:#D97706"></button>
+            <button type="button" class="color-swatch-dot" data-color="#DC2626" style="background:#DC2626"></button>
+            <button type="button" class="color-swatch-dot" data-color="#7C3AED" style="background:#7C3AED"></button>
+            <button type="button" class="color-swatch-dot" data-color="#0284C7" style="background:#0284C7"></button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary-btn" id="create-notebook-cancel">Cancel</button>
+          <button type="submit" class="primary-btn">Create Folder</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== Fullscreen Focus Mode Overlay ===== -->
+  <div id="focus-mode-overlay" class="focus-mode-overlay" style="display:none">
+    <div class="focus-mode-header">
+      <div class="focus-mode-title-wrap">
+        <span class="focus-mode-tag">FOCUS MODE</span>
+        <span class="focus-mode-note-title" id="focus-note-title">Untitled Note</span>
+      </div>
+      <div class="focus-mode-meta">
+        <span class="autosave-pill" id="focus-autosave-indicator">All changes saved ✓</span>
+        <span class="word-counter-pill" id="focus-word-count">0 words</span>
+        <button type="button" class="ghost-btn-sm" id="exit-focus-btn" title="Exit Focus Mode (Esc)">
+          <span>Exit Focus (<kbd>Esc</kbd>)</span>
+        </button>
+      </div>
+    </div>
+    <div class="focus-mode-body">
+      <textarea id="focus-note-textarea" placeholder="Start typing your distraction-free thoughts..." rows="18"></textarea>
+    </div>
+  </div>
+
+  <!-- ===== Inline Comment Pin Popover ===== -->
+  <div id="pin-comment-popover" class="pin-comment-popover" style="display:none">
+    <div class="pin-popover-header">
+      <strong id="pin-popover-title">Comment Pin</strong>
+      <button type="button" class="popover-close-btn" id="pin-popover-close">✕</button>
+    </div>
+    <div class="pin-popover-content" id="pin-popover-content">
+      <!-- Author, message, timestamp -->
+    </div>
+    <form id="pin-comment-form" class="pin-comment-form">
+      <input type="text" id="pin-comment-input" placeholder="Leave inline feedback..." required />
+      <button type="submit" class="primary-btn-xs">Post</button>
+    </form>
   </div>
 
   <!-- Toast Notification Container -->
