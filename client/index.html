@@ -374,40 +374,39 @@
 
     <!-- Main Content Area -->
     <main class="main-viewport">
-      
-      <!-- Premium Sticky Topbar (Global Search, Presence & Tools) -->
-      <header class="app-topbar">
-        <div class="topbar-left">
-          <button type="button" class="command-palette-trigger" id="open-command-palette-btn" title="Command Palette (Ctrl+K)">
-            <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <span class="cmd-trigger-text">Search or jump to...</span>
-            <span class="cmd-shortcut-badge"><kbd>Ctrl</kbd> <kbd>K</kbd></span>
-          </button>
-        </div>
-        <div class="topbar-right">
-          <!-- Active Presence Avatars Stack (Figma style) -->
-          <div class="presence-stack-container" id="presence-stack-container" title="Active collaborators in this workspace">
-            <span class="presence-label">Live:</span>
-            <div class="presence-avatars" id="presence-avatars-list">
-              <!-- Rendered dynamically -->
-            </div>
-          </div>
-
-          <div class="topbar-divider"></div>
-
-          <!-- Focus Mode Toggle Button -->
-          <button type="button" class="topbar-icon-btn" id="focus-mode-toggle" title="Toggle Distraction-free Focus Mode (F)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
-          </button>
-
-          <!-- Workspace Management Settings Button -->
-          <button type="button" class="topbar-icon-btn" id="open-workspace-mgmt-btn" title="Workspace Members & Roles">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          </button>
-        </div>
-      </header>
-
       <div class="tab-content-wrap">
+        
+        <!-- Premium Sticky Topbar (Global Search, Presence & Tools) -->
+        <header class="app-topbar">
+          <div class="topbar-left">
+            <button type="button" class="command-palette-trigger" id="open-command-palette-btn" title="Command Palette (Ctrl+K)">
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span class="cmd-trigger-text">Search or jump to...</span>
+              <span class="cmd-shortcut-badge"><kbd>Ctrl</kbd> <kbd>K</kbd></span>
+            </button>
+          </div>
+          <div class="topbar-right">
+            <!-- Active Presence Avatars Stack (Figma style) -->
+            <div class="presence-stack-container" id="presence-stack-container" title="Active collaborators in this workspace">
+              <span class="presence-label">Live:</span>
+              <div class="presence-avatars" id="presence-avatars-list">
+                <!-- Rendered dynamically -->
+              </div>
+            </div>
+
+            <div class="topbar-divider"></div>
+
+            <!-- Focus Mode Toggle Button -->
+            <button type="button" class="topbar-icon-btn" id="focus-mode-toggle" title="Toggle Distraction-free Focus Mode (F)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+            </button>
+
+            <!-- Workspace Management Settings Button -->
+            <button type="button" class="topbar-icon-btn" id="open-workspace-mgmt-btn" title="Workspace Members & Roles">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </button>
+          </div>
+        </header>
 
         <!-- ================= Tab 1: Dashboard ================= -->
         <section id="dashboard" class="tab active" role="tabpanel">
@@ -904,9 +903,21 @@
         </div>
         <div class="input-group">
           <label for="edit-note-text" class="field-label-sm">Content</label>
-          <textarea id="edit-note-text" rows="6" required></textarea>
+          <textarea id="edit-note-text" rows="5" required></textarea>
         </div>
-        <div class="modal-actions">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.75rem; margin-top:0.5rem;">
+          <div class="input-group">
+            <label for="edit-note-notebook" class="field-label-sm">Folder / Notebook</label>
+            <select id="edit-note-notebook" class="clean-select-sm" style="width:100%">
+              <option value="">No Folder (Unfiled)</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="edit-note-tags" class="field-label-sm">Tags</label>
+            <input type="text" id="edit-note-tags" placeholder="e.g. specs, release3" style="width:100%" />
+          </div>
+        </div>
+        <div class="modal-actions" style="margin-top:1rem;">
           <button type="button" class="secondary-btn" id="edit-modal-cancel">Cancel</button>
           <button type="submit" class="primary-btn">Save Changes</button>
         </div>

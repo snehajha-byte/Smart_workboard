@@ -1102,15 +1102,20 @@ button:active {
 /* ================= Main Viewport & Tabs ================= */
 .main-viewport {
   flex: 1;
-  padding: 2.5rem clamp(1.25rem, 4vw, 3.5rem);
+  padding: 1.5rem clamp(1.25rem, 3.5vw, 3rem);
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   overflow-y: auto;
+  min-width: 0;
+  width: 100%;
 }
 
 .tab-content-wrap {
   width: 100%;
-  max-width: 960px;
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
 }
 
 .tab {
@@ -1414,6 +1419,7 @@ button:active {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.25rem;
+  align-items: stretch;
 }
 
 .next-up-container, .activity-preview-card {
@@ -1422,6 +1428,39 @@ button:active {
   border-radius: var(--radius-lg);
   padding: 1.35rem 1.5rem;
   box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+}
+
+.next-up-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.next-up-empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  border: 1px dashed var(--border-default);
+}
+
+.next-up-empty-card strong {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.next-up-empty-card span {
+  font-size: 0.78rem;
+  color: var(--text-muted);
 }
 
 .card-subtitle {
@@ -2676,40 +2715,43 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 /* Sticky Topbar */
 .app-topbar {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.65rem 1.25rem;
+  padding: 0.5rem 0.85rem;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   margin-bottom: 1.5rem;
   box-shadow: var(--shadow-xs);
   position: sticky;
-  top: 12px;
+  top: 8px;
   z-index: 40;
   backdrop-filter: blur(12px);
   gap: 1rem;
 }
 
 .topbar-left {
-  flex: 1;
-  max-width: 380px;
+  display: flex;
+  align-items: center;
 }
 
 .command-palette-trigger {
-  width: 100%;
-  display: flex;
+  width: auto;
+  min-width: 210px;
+  max-width: 260px;
+  display: inline-flex;
   align-items: center;
-  gap: 0.65rem;
-  padding: 0.45rem 0.85rem;
+  gap: 0.5rem;
+  padding: 0.35rem 0.65rem;
   background: var(--bg-subtle);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 0.82rem;
+  transition: all 0.15s ease;
+  font-size: 0.78rem;
   text-align: left;
 }
 
@@ -2725,21 +2767,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 0.78rem;
 }
 
 .cmd-shortcut-badge {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.2rem;
 }
 
 .cmd-shortcut-badge kbd {
-  font-size: 0.65rem;
-  padding: 0.1rem 0.35rem;
+  font-size: 0.62rem;
+  padding: 0.08rem 0.3rem;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
+  border-radius: 3px;
   color: var(--text-dim);
+  font-family: inherit;
 }
 
 .topbar-right {

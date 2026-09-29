@@ -579,7 +579,7 @@ function switchTab(targetTabId) {
   if (targetTabId === "notes") renderNotes(document.getElementById("note-search")?.value || "");
   if (targetTabId === "tasks") loadTasks();
   if (targetTabId === "milestones") loadMilestones();
-  if (targetTabId === "comments") { loadWorkItems(); loadComments(); }
+  if (targetTabId === "comments") { loadWorkItems().then(() => loadComments()); }
   if (targetTabId === "activity") loadActivityFeed();
 }
 
@@ -757,7 +757,12 @@ async function loadDashboard() {
         </div>`;
     }
     if (!soonestTask && !soonestMilestone) {
-      nextHtml = `<div style="color:var(--text-muted); font-size:0.88rem; padding:0.5rem 0;">🎉 All caught up! No upcoming tasks or milestones due.</div>`;
+      nextHtml = `
+        <div class="next-up-empty-card">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--emerald); margin-bottom:0.35rem;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <strong>All caught up!</strong>
+          <span>No urgent tasks or milestones due within 48h.</span>
+        </div>`;
     }
     if (nextUp) nextUp.innerHTML = nextHtml;
 
@@ -766,7 +771,12 @@ async function loadDashboard() {
     if (miniActivityContainer) {
       const events = activityRes.events || [];
       if (events.length === 0) {
-        miniActivityContainer.innerHTML = `<div style="color:var(--text-muted); font-size:0.82rem; padding:0.4rem 0;">No recent actions recorded.</div>`;
+        miniActivityContainer.innerHTML = `
+          <div class="next-up-empty-card" style="padding:1rem;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent); margin-bottom:0.3rem;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            <strong>No activity recorded yet</strong>
+            <span>Team updates and actions will stream here live.</span>
+          </div>`;
       } else {
         miniActivityContainer.innerHTML = events.slice(0, 3).map((ev) => `
           <div class="mini-activity-item">
@@ -1011,6 +1021,7 @@ async function loadWorkItems() {
   if (!res.ok) return;
   const items = await res.json();
   const select = document.getElementById("workitem-select");
+  if (!select) return;
   const currentValue = select.value;
   select.innerHTML = `<option value="">Select a work item to inspect…</option>`;
   items.forEach((wi) => {
@@ -1019,7 +1030,11 @@ async function loadWorkItems() {
     opt.textContent = wi.name;
     select.appendChild(opt);
   });
-  if (currentValue) select.value = currentValue;
+  if (currentValue && items.some(wi => String(wi.id) === String(currentValue))) {
+    select.value = currentValue;
+  } else if (items.length > 0) {
+    select.value = items[0].id;
+  }
 }
 
 document.getElementById("new-workitem-form").addEventListener("submit", async (e) => {
@@ -1131,7 +1146,7 @@ function renderMarkdown(raw = "", noteId = "") {
   let html = "", inList = false;
   lines.forEach((line, lineIdx) => {
     // Interactive Checklist syntax: - [ ] or - [x]
-    const checkMatch = line.match(/^-\s+\[([ xX])\]\s*(.*)/);
+    const checkMatch = line.match(/^-\s*\[([ xX])\]\s*(.*)/);
     if (checkMatch) {
       if (inList) { html += "</ul>"; inList = false; }
       const isChecked = checkMatch[1].toLowerCase() === "x";
@@ -1230,7 +1245,7 @@ function renderNotes(filterText = "") {
     // Notebook Badge
     let folderBadgeHtml = "";
     if (n.notebook_id) {
-      const nb = cachedNotebooks.find(b => b.id === n.notebook_id);
+      const nb = cachedNotebooks.find(b => String(b.id) === String(n.notebook_id));
       if (nb) {
         folderBadgeHtml = `<span class="note-folder-tag" style="border-color:${nb.color || "var(--accent)"}; color:${nb.color || "var(--accent)"};">📁 ${nb.name}</span>`;
       }
@@ -1349,7 +1364,12 @@ function renderNotes(filterText = "") {
   list.querySelectorAll(".note-tag-pill").forEach((tp) => {
     tp.addEventListener("click", (e) => {
       e.stopPropagation();
-      activeTagFilter = tp.dataset.tag;
+      const clickedTag = tp.dataset.tag;
+      if (activeTagFilter.toLowerCase() === clickedTag.toLowerCase()) {
+        activeTagFilter = "";
+      } else {
+        activeTagFilter = clickedTag;
+      }
       renderTagsFilterBar();
       renderNotes(document.getElementById("note-search")?.value || "");
     });
@@ -1377,6 +1397,21 @@ function openEditNoteModal(id) {
   document.getElementById("edit-note-id").value = id;
   document.getElementById("edit-note-title").value = note.title || "";
   document.getElementById("edit-note-text").value = note.text || "";
+
+  // Populate notebooks dropdown in edit modal
+  const nbSelect = document.getElementById("edit-note-notebook");
+  if (nbSelect) {
+    nbSelect.innerHTML = '<option value="">No Folder (Unfiled)</option>' +
+      cachedNotebooks.map(nb => `<option value="${nb.id}">${nb.name}</option>`).join("");
+    nbSelect.value = note.notebook_id ? String(note.notebook_id) : "";
+  }
+
+  // Populate tags input
+  const tagsInput = document.getElementById("edit-note-tags");
+  if (tagsInput) {
+    tagsInput.value = note.tags || "";
+  }
+
   document.getElementById("edit-note-modal").style.display = "flex";
   document.getElementById("edit-note-title").focus();
 }
@@ -1389,24 +1424,36 @@ function closeEditNoteModal() {
 document.getElementById("edit-modal-close")?.addEventListener("click", closeEditNoteModal);
 document.getElementById("edit-modal-cancel")?.addEventListener("click", closeEditNoteModal);
 
-document.getElementById("edit-note-form")?.addEventListener("submit", (e) => {
+document.getElementById("edit-note-form")?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!activeEditingNoteId) return;
   const notes = getLocalNotes();
   const note = notes.find((n) => n.id === activeEditingNoteId);
   if (!note) return;
 
+  const nbSelect = document.getElementById("edit-note-notebook");
+  const assignedNbId = nbSelect && nbSelect.value ? Number(nbSelect.value) : null;
+  const tagsVal = document.getElementById("edit-note-tags")?.value || "";
+
   note.title = document.getElementById("edit-note-title").value;
   note.text = document.getElementById("edit-note-text").value;
+  note.notebook_id = assignedNbId;
+  note.tags = tagsVal;
   note.updated_at = new Date().toISOString();
   note.synced = false;
 
   saveLocalNotes(notes);
+  renderNotebooksTabs();
+  renderTagsFilterBar();
   renderNotes(document.getElementById("note-search")?.value || "");
   updateSyncIndicator();
   closeEditNoteModal();
-  showToast("Note updated locally", "success");
-  if (navigator.onLine) syncPendingNotes();
+  showToast("Note updated ✓", "success");
+  if (navigator.onLine) {
+    await trySyncNote(note);
+    saveLocalNotes(notes);
+    renderNotes(document.getElementById("note-search")?.value || "");
+  }
 });
 
 // Custom Modal: Delete Confirm
@@ -1771,11 +1818,11 @@ function toggleNoteChecklist(noteId, lineIdx, checked) {
   const lines = note.text.split("\n");
   if (lines[lineIdx] !== undefined) {
     if (checked) {
-      lines[lineIdx] = lines[lineIdx].replace(/^-\s+\\[\\s*\\]/, "- [x]");
+      lines[lineIdx] = lines[lineIdx].replace(/^(-\s*\[)\s*(\])/, "$1x$2");
     } else {
-      lines[lineIdx] = lines[lineIdx].replace(/^-\s+\\[[xX]\\]/, "- [ ]");
+      lines[lineIdx] = lines[lineIdx].replace(/^(-\s*\[)[xX](\])/, "$1 $2");
     }
-    note.text = lines.join("\\n");
+    note.text = lines.join("\n");
     note.updated_at = new Date().toISOString();
     note.synced = false;
     saveLocalNotes(notes);
@@ -1811,7 +1858,7 @@ function renderNotebooksTabs() {
   `;
 
   cachedNotebooks.forEach(nb => {
-    const count = notes.filter(n => n.notebook_id === nb.id).length;
+    const count = notes.filter(n => String(n.notebook_id) === String(nb.id)).length;
     tabsHtml += `
       <button type="button" class="notebook-chip ${activeNotebookId === String(nb.id) ? "active" : ""}" data-notebook-id="${nb.id}">
         <span style="color:${nb.color || "var(--accent)"};">●</span>
@@ -1934,7 +1981,12 @@ function renderTagsFilterBar() {
 
   container.querySelectorAll(".tag-chip").forEach(chip => {
     chip.addEventListener("click", () => {
-      activeTagFilter = chip.dataset.tag;
+      const selected = chip.dataset.tag;
+      if (activeTagFilter.toLowerCase() === selected.toLowerCase()) {
+        activeTagFilter = "";
+      } else {
+        activeTagFilter = selected;
+      }
       renderTagsFilterBar();
       renderNotes(document.getElementById("note-search")?.value || "");
     });
@@ -1986,6 +2038,7 @@ document.querySelectorAll("#note-color-swatches .color-swatch-dot").forEach(dot 
 function setupNoteAutoSave() {
   const titleInput = document.getElementById("note-title");
   const textInput = document.getElementById("note-text");
+  const tagsInput = document.getElementById("note-tags-input");
   const indicator = document.getElementById("note-autosave-indicator");
   const wordCounter = document.getElementById("note-word-count");
 
@@ -1999,76 +2052,50 @@ function setupNoteAutoSave() {
     }
 
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
-    autoSaveTimer = setTimeout(async () => {
-      const title = titleInput?.value.trim() || "";
-      const text = textInput?.value.trim() || "";
-      if (!title && !text) {
+    autoSaveTimer = setTimeout(() => {
+      const title = titleInput?.value || "";
+      const text = textInput?.value || "";
+      const tags = tagsInput?.value || "";
+
+      if (title.trim() || text.trim()) {
+        localStorage.setItem("wb_draft_title", title);
+        localStorage.setItem("wb_draft_text", text);
+        if (tags) localStorage.setItem("wb_draft_tags", tags);
+        else localStorage.removeItem("wb_draft_tags");
+        if (indicator) {
+          indicator.textContent = "Draft saved locally ✓";
+          indicator.classList.remove("saving");
+        }
+      } else {
+        localStorage.removeItem("wb_draft_title");
+        localStorage.removeItem("wb_draft_text");
+        localStorage.removeItem("wb_draft_tags");
         if (indicator) {
           indicator.textContent = "All changes saved ✓";
           indicator.classList.remove("saving");
         }
-        return;
       }
-
-      let draftId = localStorage.getItem("wb_active_draft_id");
-      const notes = getLocalNotes();
-      let note = notes.find(n => n.id === draftId);
-      const now = new Date().toISOString();
-      const nbSelect = document.getElementById("note-notebook-select");
-      const assignedNbId = nbSelect && nbSelect.value ? Number(nbSelect.value) : (activeNotebookId !== "all" ? Number(activeNotebookId) : null);
-      const tagsVal = document.getElementById("note-tags-input")?.value || "";
-
-      if (!note) {
-        draftId = "note-" + Date.now();
-        localStorage.setItem("wb_active_draft_id", draftId);
-        note = {
-          id: draftId,
-          title: title || "Untitled Note",
-          text: text,
-          author: getCurrentUser()?.name || "You",
-          created_at: now,
-          updated_at: now,
-          synced: false,
-          notebook_id: assignedNbId,
-          tags: tagsVal,
-          color: selectedNoteColor || "",
-          pinned: false
-        };
-        notes.unshift(note);
-      } else {
-        note.title = title || "Untitled Note";
-        note.text = text;
-        note.notebook_id = assignedNbId;
-        note.tags = tagsVal;
-        note.color = selectedNoteColor || note.color;
-        note.updated_at = now;
-        note.synced = false;
-      }
-
-      saveLocalNotes(notes);
-      renderNotes(document.getElementById("note-search")?.value || "");
-      updateSyncIndicator();
-      await trySyncNote(note);
-
-      if (indicator) {
-        indicator.textContent = "All changes saved ✓";
-        indicator.classList.remove("saving");
-      }
-    }, 1500);
+    }, 400);
   }
 
   titleInput?.addEventListener("input", onInput);
   textInput?.addEventListener("input", onInput);
+  tagsInput?.addEventListener("input", onInput);
 }
 
 // Reset draft ID on explicit form submission
 document.getElementById("note-form")?.addEventListener("submit", () => {
+  localStorage.removeItem("wb_draft_title");
+  localStorage.removeItem("wb_draft_text");
+  localStorage.removeItem("wb_draft_tags");
   localStorage.removeItem("wb_active_draft_id");
   const indicator = document.getElementById("note-autosave-indicator");
   if (indicator) {
     indicator.textContent = "All changes saved ✓";
     indicator.classList.remove("saving");
   }
+  const wordCounter = document.getElementById("note-word-count");
+  if (wordCounter) wordCounter.textContent = "0 words";
 });
 
 // --- 5. Note Version History ---
@@ -2332,19 +2359,33 @@ function closeCommandPalette() {
 
 document.getElementById("open-command-palette-btn")?.addEventListener("click", openCommandPalette);
 
+function updatePaletteActiveHighlight() {
+  if (!cmdPaletteModal) return;
+  const items = cmdPaletteModal.querySelectorAll(".cmd-item");
+  if (items.length === 0) return;
+  if (activeCmdIndex >= items.length) activeCmdIndex = 0;
+  if (activeCmdIndex < 0) activeCmdIndex = items.length - 1;
+  items.forEach((it, idx) => {
+    it.classList.toggle("active", idx === activeCmdIndex);
+    if (idx === activeCmdIndex) {
+      it.scrollIntoView({ block: "nearest" });
+    }
+  });
+}
+
 function renderCommandActions(query = "") {
   if (!cmdActionsList) return;
   const q = query.toLowerCase().trim();
   const filtered = PALETTE_ACTIONS.filter(a => a.label.toLowerCase().includes(q) || a.category.toLowerCase().includes(q));
 
-  if (filtered.length === 0 && !q) {
+  if (filtered.length === 0) {
     cmdActionsSection.style.display = "none";
     return;
   }
   cmdActionsSection.style.display = "block";
 
-  cmdActionsList.innerHTML = filtered.map((a, idx) => `
-    <div class="cmd-item ${idx === activeCmdIndex ? "active" : ""}" data-action-id="${a.id}">
+  cmdActionsList.innerHTML = filtered.map((a) => `
+    <div class="cmd-item" data-action-id="${a.id}">
       <div class="cmd-item-left">
         <span>${a.icon}</span>
         <span>${a.label}</span>
@@ -2365,6 +2406,7 @@ function renderCommandActions(query = "") {
       }
     });
   });
+  updatePaletteActiveHighlight();
 }
 
 let cmdSearchTimer = null;
@@ -2378,6 +2420,7 @@ cmdInput?.addEventListener("input", (e) => {
     cmdSearchTimer = setTimeout(() => performGlobalSearch(val.trim()), 200);
   } else {
     cmdResultsSection.style.display = "none";
+    updatePaletteActiveHighlight();
   }
 });
 
@@ -2391,7 +2434,7 @@ async function performGlobalSearch(query) {
     (data.notes || []).forEach(n => cmdSearchResults.push({ type: "note", title: n.title || "Untitled Note", sub: n.tags ? "#" + n.tags : "Note", target: "notes" }));
     (data.tasks || []).forEach(t => cmdSearchResults.push({ type: "task", title: t.title, sub: "Task · " + t.priority, target: "tasks" }));
     (data.milestones || []).forEach(m => cmdSearchResults.push({ type: "milestone", title: m.title, sub: "Milestone · Due " + m.due_date, target: "milestones" }));
-    (data.comments || []).forEach(c => cmdSearchResults.push({ type: "comment", title: c.text, sub: "Comment on " + c.workitem_name, target: "comments" }));
+    (data.comments || []).forEach(c => cmdSearchResults.push({ type: "comment", title: c.text, sub: "Comment on " + (c.workitem_name || "Deliverable"), target: "comments" }));
 
     if (cmdSearchResults.length === 0) {
       cmdResultsSection.style.display = "block";
@@ -2419,19 +2462,22 @@ async function performGlobalSearch(query) {
         switchTab(item.dataset.searchTarget);
       });
     });
+    updatePaletteActiveHighlight();
   } catch (err) {}
 }
 
 cmdInput?.addEventListener("keydown", (e) => {
-  const items = cmdActionsList?.querySelectorAll(".cmd-item") || [];
+  const items = cmdPaletteModal ? Array.from(cmdPaletteModal.querySelectorAll(".cmd-item")) : [];
+  if (items.length === 0) return;
+
   if (e.key === "ArrowDown") {
     e.preventDefault();
-    activeCmdIndex = (activeCmdIndex + 1) % Math.max(1, items.length);
-    items.forEach((it, idx) => it.classList.toggle("active", idx === activeCmdIndex));
+    activeCmdIndex = (activeCmdIndex + 1) % items.length;
+    updatePaletteActiveHighlight();
   } else if (e.key === "ArrowUp") {
     e.preventDefault();
-    activeCmdIndex = (activeCmdIndex - 1 + items.length) % Math.max(1, items.length);
-    items.forEach((it, idx) => it.classList.toggle("active", idx === activeCmdIndex));
+    activeCmdIndex = (activeCmdIndex - 1 + items.length) % items.length;
+    updatePaletteActiveHighlight();
   } else if (e.key === "Enter") {
     e.preventDefault();
     if (items[activeCmdIndex]) {
@@ -2835,6 +2881,24 @@ async function enterApp() {
   await loadReactions();
   await sendPresenceHeartbeat();
   setupNoteAutoSave();
+
+  // Restore note draft if saved
+  const draftTitle = localStorage.getItem("wb_draft_title");
+  const draftText = localStorage.getItem("wb_draft_text");
+  const draftTags = localStorage.getItem("wb_draft_tags");
+  if (draftTitle || draftText) {
+    const titleInput = document.getElementById("note-title");
+    const textInput = document.getElementById("note-text");
+    const tagsInput = document.getElementById("note-tags-input");
+    if (titleInput && draftTitle) titleInput.value = draftTitle;
+    if (textInput && draftText) textInput.value = draftText;
+    if (tagsInput && draftTags) tagsInput.value = draftTags;
+    const indicator = document.getElementById("note-autosave-indicator");
+    if (indicator) indicator.textContent = "Draft restored ✓";
+    const words = (textInput?.value || "").trim().split(/\s+/).filter(Boolean).length;
+    const wordCounter = document.getElementById("note-word-count");
+    if (wordCounter) wordCounter.textContent = `${words} ${words === 1 ? "word" : "words"}`;
+  }
   loadDashboard();
   loadTasks();
   loadMilestones();
