@@ -163,7 +163,8 @@ function ensureColumns() {
     { table: "notes", column: "notebook_id", definition: "INTEGER REFERENCES notebooks(id)" },
     { table: "notes", column: "tags", definition: "TEXT DEFAULT ''" },
     { table: "notes", column: "color", definition: "TEXT DEFAULT ''" },
-    { table: "notes", column: "pinned", definition: "INTEGER DEFAULT 0" }
+    { table: "notes", column: "pinned", definition: "INTEGER DEFAULT 0" },
+    { table: "notes", column: "sketch", definition: "TEXT DEFAULT ''" }
   ];
 
   for (const mig of columnMigrations) {

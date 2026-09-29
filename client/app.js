@@ -1185,6 +1185,989 @@ function inlineFormat(text) {
     .replace(/==(.+?)==/g, "<mark>$1</mark>");
 }
 
+
+// ==========================================================================
+// Sketch & Whiteboard Canvas Engine (Release 3.5)
+// ==========================================================================
+class WhiteboardEngine {
+  constructor(canvas, toolbarEl, options = {}) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.toolbarEl = toolbarEl;
+    this.options = options; // { onChange: () => {} }
+
+    this.elements = [];
+    this.undoStack = [];
+    this.redoStack = [];
+
+    this.currentTool = "pen"; // 'pen' | 'select' | 'rect' | 'circle' | 'arrow' | 'text' | 'eraser'
+    this.currentColor = "#1E293B";
+    this.strokeWidth = 2.5;
+
+    this.isPointerDown = false;
+    this.dragStart = { x: 0, y: 0 };
+    this.currentDrawingElement = null;
+    this.selectedElement = null;
+    this.selectedElementStartPos = null;
+    this.hoverAnchor = null;
+    this.dpr = window.devicePixelRatio || 1;
+
+    this.initCanvas();
+    this.bindToolbar();
+    this.bindEvents();
+    this.render();
+  }
+
+  initCanvas() {
+    this.resizeCanvas();
+  }
+
+  resizeCanvas() {
+    if (!this.canvas) return;
+    const parent = this.canvas.parentElement;
+    if (!parent) return;
+    const rect = parent.getBoundingClientRect();
+    const w = Math.max(300, Math.floor(rect.width || 900));
+    const h = Math.max(200, Math.floor(rect.height || (this.canvas.id === "studio-sketch-canvas" ? 800 : 340)));
+    this.dpr = window.devicePixelRatio || 1;
+    this.canvas.width = Math.floor(w * this.dpr);
+    this.canvas.height = Math.floor(h * this.dpr);
+    this.canvas.style.width = w + "px";
+    this.canvas.style.height = h + "px";
+    this.render();
+  }
+
+  bindToolbar() {
+    if (!this.toolbarEl) return;
+
+    // Tool selection buttons
+    this.toolbarEl.querySelectorAll(".sketch-tool-btn[data-tool]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this.setTool(btn.dataset.tool);
+      });
+    });
+
+    // Color swatch buttons
+    this.toolbarEl.querySelectorAll(".sketch-color-dot[data-color]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this.setColor(btn.dataset.color);
+      });
+    });
+
+    // Undo button
+    const undoBtn = this.toolbarEl.querySelector("#composer-sketch-undo-btn, #studio-sketch-undo-btn");
+    if (undoBtn) {
+      undoBtn.addEventListener("click", () => this.undo());
+    }
+
+    // Clear canvas button
+    const clearBtn = this.toolbarEl.querySelector("#composer-sketch-clear-btn, #studio-sketch-clear-btn");
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        if (this.elements.length > 0) {
+          this.pushUndo();
+          this.elements = [];
+          this.selectedElement = null;
+          this.hoverAnchor = null;
+          this.render();
+          this.triggerChange();
+        }
+      });
+    }
+  }
+
+  setTool(tool) {
+    this.currentTool = tool;
+    this.selectedElement = null;
+    this.hoverAnchor = null;
+    if (this.toolbarEl) {
+      this.toolbarEl.querySelectorAll(".sketch-tool-btn[data-tool]").forEach((b) => {
+        b.classList.toggle("active", b.dataset.tool === tool);
+      });
+    }
+    if (this.canvas) {
+      if (tool === "select") this.canvas.style.cursor = "default";
+      else if (tool === "text") this.canvas.style.cursor = "text";
+      else if (tool === "eraser") this.canvas.style.cursor = "not-allowed";
+      else this.canvas.style.cursor = "crosshair";
+    }
+    this.render();
+  }
+
+  setColor(color) {
+    this.currentColor = color;
+    if (this.selectedElement) {
+      this.pushUndo();
+      this.selectedElement.color = color;
+      this.triggerChange();
+    }
+    if (this.toolbarEl) {
+      this.toolbarEl.querySelectorAll(".sketch-color-dot").forEach((b) => {
+        b.classList.toggle("active", b.dataset.color === color);
+      });
+    }
+    this.render();
+  }
+
+  getCanvasPoint(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const clientX = e.clientX ?? (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    const clientY = e.clientY ?? (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    };
+  }
+
+  bindEvents() {
+    if (!this.canvas) return;
+
+    const onPointerDown = (e) => {
+      if (e.target && e.target.classList.contains("canvas-floating-text-input")) return;
+
+      const pt = this.getCanvasPoint(e);
+      this.isPointerDown = true;
+      this.dragStart = { x: pt.x, y: pt.y };
+
+      if (this.currentTool === "text") {
+        this.placeTextInput(pt);
+        this.isPointerDown = false;
+        return;
+      }
+
+      if (this.currentTool === "eraser") {
+        const hit = this.hitTest(pt.x, pt.y);
+        if (hit) this.eraseElement(hit);
+        return;
+      }
+
+      if (this.currentTool === "select") {
+        const hit = this.hitTest(pt.x, pt.y);
+        this.selectedElement = hit;
+        if (hit) {
+          this.selectedElementStartPos = this.cloneElementPos(hit);
+          this.canvas.style.cursor = "grab";
+        }
+        this.render();
+        return;
+      }
+
+      // Drawing shapes / strokes / arrows
+      this.pushUndo();
+      const elId = "wb-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5);
+
+      if (this.currentTool === "pen") {
+        this.currentDrawingElement = {
+          id: elId,
+          type: "stroke",
+          points: [{ x: pt.x, y: pt.y }],
+          color: this.currentColor,
+          strokeWidth: this.strokeWidth
+        };
+      } else if (this.currentTool === "rect") {
+        this.currentDrawingElement = {
+          id: elId,
+          type: "rect",
+          x: pt.x,
+          y: pt.y,
+          width: 0,
+          height: 0,
+          seed: Math.floor(Math.random() * 1000),
+          color: this.currentColor,
+          strokeWidth: this.strokeWidth
+        };
+      } else if (this.currentTool === "circle") {
+        this.currentDrawingElement = {
+          id: elId,
+          type: "circle",
+          cx: pt.x,
+          cy: pt.y,
+          radius: 0,
+          seed: Math.floor(Math.random() * 1000),
+          color: this.currentColor,
+          strokeWidth: this.strokeWidth
+        };
+      } else if (this.currentTool === "arrow") {
+        const startAnchor = this.findNearestAnchor(pt.x, pt.y, null, 24);
+        const startX = startAnchor ? startAnchor.x : pt.x;
+        const startY = startAnchor ? startAnchor.y : pt.y;
+        this.currentDrawingElement = {
+          id: elId,
+          type: "arrow",
+          x1: startX,
+          y1: startY,
+          x2: startX,
+          y2: startY,
+          startAnchor: startAnchor ? { shapeId: startAnchor.shapeId, anchor: startAnchor.anchor } : null,
+          endAnchor: null,
+          color: this.currentColor,
+          strokeWidth: this.strokeWidth
+        };
+      }
+
+      if (this.currentDrawingElement) {
+        this.elements.push(this.currentDrawingElement);
+        this.render();
+      }
+    };
+
+    const onPointerMove = (e) => {
+      const pt = this.getCanvasPoint(e);
+
+      if (!this.isPointerDown) {
+        if (this.currentTool === "arrow") {
+          const anchor = this.findNearestAnchor(pt.x, pt.y, null, 24);
+          if (anchor !== this.hoverAnchor) {
+            this.hoverAnchor = anchor;
+            this.render();
+          }
+        }
+        return;
+      }
+
+      if (this.currentTool === "eraser") {
+        const hit = this.hitTest(pt.x, pt.y);
+        if (hit) this.eraseElement(hit);
+        return;
+      }
+
+      if (this.currentTool === "select" && this.selectedElement && this.selectedElementStartPos) {
+        const dx = pt.x - this.dragStart.x;
+        const dy = pt.y - this.dragStart.y;
+        this.moveElement(this.selectedElement, this.selectedElementStartPos, dx, dy);
+        this.render();
+        return;
+      }
+
+      if (!this.currentDrawingElement) return;
+
+      const el = this.currentDrawingElement;
+      if (el.type === "stroke") {
+        el.points.push({ x: pt.x, y: pt.y });
+      } else if (el.type === "rect") {
+        el.width = pt.x - el.x;
+        el.height = pt.y - el.y;
+      } else if (el.type === "circle") {
+        el.radius = Math.hypot(pt.x - el.cx, pt.y - el.cy);
+      } else if (el.type === "arrow") {
+        const excludeId = el.startAnchor ? el.startAnchor.shapeId : null;
+        const endAnchor = this.findNearestAnchor(pt.x, pt.y, excludeId, 24);
+        if (endAnchor) {
+          el.x2 = endAnchor.x;
+          el.y2 = endAnchor.y;
+          el.endAnchor = { shapeId: endAnchor.shapeId, anchor: endAnchor.anchor };
+          this.hoverAnchor = endAnchor;
+        } else {
+          el.x2 = pt.x;
+          el.y2 = pt.y;
+          el.endAnchor = null;
+          this.hoverAnchor = null;
+        }
+      }
+
+      this.render();
+    };
+
+    const onPointerUp = () => {
+      if (!this.isPointerDown) return;
+      this.isPointerDown = false;
+      this.hoverAnchor = null;
+
+      if (this.currentTool === "select" && this.selectedElement) {
+        this.canvas.style.cursor = "default";
+        this.triggerChange();
+      }
+
+      if (this.currentDrawingElement) {
+        const el = this.currentDrawingElement;
+        let valid = true;
+        if (el.type === "rect" && Math.abs(el.width) < 3 && Math.abs(el.height) < 3) valid = false;
+        if (el.type === "circle" && el.radius < 3) valid = false;
+        if (el.type === "arrow" && Math.hypot(el.x2 - el.x1, el.y2 - el.y1) < 4) valid = false;
+
+        if (!valid) {
+          this.elements.pop();
+          this.undoStack.pop();
+        } else {
+          this.triggerChange();
+        }
+        this.currentDrawingElement = null;
+        this.render();
+      }
+    };
+
+    this.canvas.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("mousemove", onPointerMove);
+    window.addEventListener("mouseup", onPointerUp);
+
+    this.canvas.addEventListener("touchstart", (e) => { e.preventDefault(); onPointerDown(e); }, { passive: false });
+    window.addEventListener("touchmove", (e) => { onPointerMove(e); }, { passive: false });
+    window.addEventListener("touchend", onPointerUp);
+  }
+
+  cloneElementPos(el) {
+    if (el.type === "rect") return { x: el.x, y: el.y, width: el.width, height: el.height };
+    if (el.type === "circle") return { cx: el.cx, cy: el.cy, radius: el.radius };
+    if (el.type === "arrow") return { x1: el.x1, y1: el.y1, x2: el.x2, y2: el.y2 };
+    if (el.type === "text") return { x: el.x, y: el.y };
+    if (el.type === "stroke") return { points: el.points.map(p => ({ x: p.x, y: p.y })) };
+    return null;
+  }
+
+  moveElement(el, startPos, dx, dy) {
+    if (el.type === "rect") {
+      el.x = startPos.x + dx;
+      el.y = startPos.y + dy;
+      this.updateAttachedArrows(el);
+    } else if (el.type === "circle") {
+      el.cx = startPos.cx + dx;
+      el.cy = startPos.cy + dy;
+      this.updateAttachedArrows(el);
+    } else if (el.type === "text") {
+      el.x = startPos.x + dx;
+      el.y = startPos.y + dy;
+    } else if (el.type === "stroke") {
+      el.points = startPos.points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+    } else if (el.type === "arrow") {
+      el.x1 = startPos.x1 + dx;
+      el.y1 = startPos.y1 + dy;
+      el.x2 = startPos.x2 + dx;
+      el.y2 = startPos.y2 + dy;
+      el.startAnchor = null;
+      el.endAnchor = null;
+    }
+  }
+
+  getShapeAnchors(shape) {
+    if (shape.type === "rect") {
+      const rx = Math.min(shape.x, shape.x + shape.width);
+      const ry = Math.min(shape.y, shape.y + shape.height);
+      const rw = Math.abs(shape.width);
+      const rh = Math.abs(shape.height);
+      return {
+        top: { x: rx + rw / 2, y: ry },
+        bottom: { x: rx + rw / 2, y: ry + rh },
+        left: { x: rx, y: ry + rh / 2 },
+        right: { x: rx + rw, y: ry + rh / 2 }
+      };
+    } else if (shape.type === "circle") {
+      const r = Math.abs(shape.radius);
+      return {
+        top: { x: shape.cx, y: shape.cy - r },
+        bottom: { x: shape.cx, y: shape.cy + r },
+        left: { x: shape.cx - r, y: shape.cy },
+        right: { x: shape.cx + r, y: shape.cy }
+      };
+    }
+    return null;
+  }
+
+  findNearestAnchor(px, py, excludeShapeId = null, maxDist = 24) {
+    let nearest = null;
+    let minDist = maxDist;
+    for (const el of this.elements) {
+      if (el.id === excludeShapeId) continue;
+      const anchors = this.getShapeAnchors(el);
+      if (!anchors) continue;
+      for (const [key, pt] of Object.entries(anchors)) {
+        const d = Math.hypot(pt.x - px, pt.y - py);
+        if (d < minDist) {
+          minDist = d;
+          nearest = { shapeId: el.id, anchor: key, x: pt.x, y: pt.y };
+        }
+      }
+    }
+    return nearest;
+  }
+
+  updateAttachedArrows(shape) {
+    const anchors = this.getShapeAnchors(shape);
+    if (!anchors) return;
+    for (const el of this.elements) {
+      if (el.type !== "arrow") continue;
+      if (el.startAnchor && el.startAnchor.shapeId === shape.id) {
+        const pt = anchors[el.startAnchor.anchor];
+        if (pt) {
+          el.x1 = pt.x;
+          el.y1 = pt.y;
+        }
+      }
+      if (el.endAnchor && el.endAnchor.shapeId === shape.id) {
+        const pt = anchors[el.endAnchor.anchor];
+        if (pt) {
+          el.x2 = pt.x;
+          el.y2 = pt.y;
+        }
+      }
+    }
+  }
+
+  hitTest(px, py) {
+    for (let i = this.elements.length - 1; i >= 0; i--) {
+      const el = this.elements[i];
+      if (el.type === "rect") {
+        const rx = Math.min(el.x, el.x + el.width) - 6;
+        const ry = Math.min(el.y, el.y + el.height) - 6;
+        const rw = Math.abs(el.width) + 12;
+        const rh = Math.abs(el.height) + 12;
+        if (px >= rx && px <= rx + rw && py >= ry && py <= ry + rh) return el;
+      } else if (el.type === "circle") {
+        const d = Math.hypot(px - el.cx, py - el.cy);
+        if (Math.abs(d - el.radius) <= 12 || d <= el.radius) return el;
+      } else if (el.type === "arrow") {
+        const d = this.distToSegment(px, py, el.x1, el.y1, el.x2, el.y2);
+        if (d <= 12) return el;
+      } else if (el.type === "text") {
+        const tw = (el.text || "").length * 10 + 16;
+        const th = (el.fontSize || 16) * 1.5;
+        if (px >= el.x - 4 && px <= el.x + tw && py >= el.y - 4 && py <= el.y + th) return el;
+      } else if (el.type === "stroke") {
+        for (let j = 0; j < el.points.length - 1; j++) {
+          const d = this.distToSegment(px, py, el.points[j].x, el.points[j].y, el.points[j + 1].x, el.points[j + 1].y);
+          if (d <= 10) return el;
+        }
+      }
+    }
+    return null;
+  }
+
+  distToSegment(px, py, x1, y1, x2, y2) {
+    const l2 = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
+    if (l2 === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+  }
+
+  eraseElement(el) {
+    this.pushUndo();
+    this.elements = this.elements.filter(e => e.id !== el.id);
+    if (this.selectedElement === el) this.selectedElement = null;
+    this.elements.forEach((arrow) => {
+      if (arrow.type === "arrow") {
+        if (arrow.startAnchor && arrow.startAnchor.shapeId === el.id) arrow.startAnchor = null;
+        if (arrow.endAnchor && arrow.endAnchor.shapeId === el.id) arrow.endAnchor = null;
+      }
+    });
+    this.render();
+    this.triggerChange();
+  }
+
+  placeTextInput(pt) {
+    const wrapper = this.canvas.parentElement;
+    if (!wrapper) return;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "canvas-floating-text-input";
+    input.style.left = pt.x + "px";
+    input.style.top = pt.y + "px";
+    input.placeholder = "Label… (Enter to place)";
+    wrapper.appendChild(input);
+    input.focus();
+
+    const commit = () => {
+      if (input.parentNode) {
+        const val = input.value.trim();
+        if (val) {
+          this.pushUndo();
+          this.elements.push({
+            id: "txt-" + Date.now() + "-" + Math.random().toString(36).substr(2, 4),
+            type: "text",
+            x: pt.x,
+            y: pt.y,
+            text: val,
+            color: this.currentColor,
+            fontSize: 16
+          });
+          this.render();
+          this.triggerChange();
+        }
+        input.remove();
+      }
+    };
+
+    input.addEventListener("keydown", (ke) => {
+      if (ke.key === "Enter") commit();
+      if (ke.key === "Escape") input.remove();
+    });
+    input.addEventListener("blur", commit);
+  }
+
+  pushUndo() {
+    this.undoStack.push(JSON.stringify(this.elements));
+    if (this.undoStack.length > 50) this.undoStack.shift();
+    this.redoStack = [];
+  }
+
+  undo() {
+    if (this.undoStack.length === 0) return;
+    this.redoStack.push(JSON.stringify(this.elements));
+    const prev = this.undoStack.pop();
+    this.elements = JSON.parse(prev);
+    this.selectedElement = null;
+    this.hoverAnchor = null;
+    this.render();
+    this.triggerChange();
+  }
+
+  clear() {
+    this.elements = [];
+    this.undoStack = [];
+    this.redoStack = [];
+    this.selectedElement = null;
+    this.hoverAnchor = null;
+    this.render();
+    this.triggerChange();
+  }
+
+  importElements(elements) {
+    this.elements = Array.isArray(elements) ? JSON.parse(JSON.stringify(elements)) : [];
+    this.undoStack = [];
+    this.redoStack = [];
+    this.selectedElement = null;
+    this.hoverAnchor = null;
+    this.render();
+  }
+
+  triggerChange() {
+    if (typeof this.options.onChange === "function") {
+      this.options.onChange(this.elements);
+    }
+  }
+
+  render() {
+    if (!this.ctx || !this.canvas) return;
+    this.ctx.save();
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.ctx.clearRect(0, 0, this.canvas.width / this.dpr, this.canvas.height / this.dpr);
+    this.renderElements(this.ctx, true);
+    this.ctx.restore();
+  }
+
+  renderElements(ctx, isInteractive = true) {
+    for (const el of this.elements) {
+      if (el.type === "stroke") this.drawHandDrawnStroke(ctx, el);
+      else if (el.type === "rect") this.drawHandDrawnRect(ctx, el);
+      else if (el.type === "circle") this.drawHandDrawnCircle(ctx, el);
+      else if (el.type === "arrow") this.drawHandDrawnArrow(ctx, el);
+      else if (el.type === "text") this.drawText(ctx, el);
+    }
+
+    if (!isInteractive) return;
+
+    // Selection dashed boundary
+    if (this.selectedElement) {
+      ctx.save();
+      ctx.strokeStyle = "#4F46E5";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      if (this.selectedElement.type === "rect") {
+        const rx = Math.min(this.selectedElement.x, this.selectedElement.x + this.selectedElement.width) - 4;
+        const ry = Math.min(this.selectedElement.y, this.selectedElement.y + this.selectedElement.height) - 4;
+        const rw = Math.abs(this.selectedElement.width) + 8;
+        const rh = Math.abs(this.selectedElement.height) + 8;
+        ctx.strokeRect(rx, ry, rw, rh);
+      } else if (this.selectedElement.type === "circle") {
+        ctx.beginPath();
+        ctx.arc(this.selectedElement.cx, this.selectedElement.cy, this.selectedElement.radius + 4, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (this.selectedElement.type === "text") {
+        const tw = (this.selectedElement.text || "").length * 10 + 12;
+        const th = (this.selectedElement.fontSize || 16) * 1.4;
+        ctx.strokeRect(this.selectedElement.x - 4, this.selectedElement.y - 2, tw, th);
+      }
+      ctx.restore();
+    }
+
+    // Anchor snap indicators
+    if (this.currentTool === "arrow" || (this.isPointerDown && this.currentDrawingElement?.type === "arrow")) {
+      for (const el of this.elements) {
+        const anchors = this.getShapeAnchors(el);
+        if (!anchors) continue;
+        for (const [key, pt] of Object.entries(anchors)) {
+          const isHov = this.hoverAnchor && this.hoverAnchor.shapeId === el.id && this.hoverAnchor.anchor === key;
+          this.drawAnchorIndicator(ctx, pt, isHov);
+        }
+      }
+    }
+  }
+
+  drawHandDrawnStroke(ctx, el) {
+    const pts = el.points;
+    if (!pts || pts.length === 0) return;
+    ctx.save();
+    ctx.strokeStyle = el.color;
+    ctx.lineWidth = el.strokeWidth || 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (pts.length === 1) {
+      ctx.beginPath();
+      ctx.arc(pts[0].x, pts[0].y, (el.strokeWidth || 2.5) / 2, 0, Math.PI * 2);
+      ctx.fillStyle = el.color;
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const xc = (pts[i].x + pts[i + 1].x) / 2;
+      const yc = (pts[i].y + pts[i + 1].y) / 2;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+    }
+    ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawHandDrawnRect(ctx, el) {
+    const rx = Math.min(el.x, el.x + el.width);
+    const ry = Math.min(el.y, el.y + el.height);
+    const rw = Math.abs(el.width);
+    const rh = Math.abs(el.height);
+    if (rw < 2 || rh < 2) return;
+
+    ctx.save();
+    ctx.strokeStyle = el.color;
+    ctx.lineWidth = el.strokeWidth || 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const s = el.seed || (el.seed = Math.floor(Math.random() * 1000));
+    const j1 = ((s % 5) - 2) * 0.45;
+    const j2 = (((s * 3) % 5) - 2) * 0.45;
+    const j3 = (((s * 7) % 5) - 2) * 0.45;
+    const j4 = (((s * 11) % 5) - 2) * 0.45;
+
+    ctx.beginPath();
+    ctx.moveTo(rx + j1, ry);
+    ctx.quadraticCurveTo(rx + rw / 2, ry - j2, rx + rw + j2, ry);
+    ctx.quadraticCurveTo(rx + rw + j3, ry + rh / 2, rx + rw, ry + rh + j1);
+    ctx.quadraticCurveTo(rx + rw / 2, ry + rh + j4, rx + j3, ry + rh);
+    ctx.quadraticCurveTo(rx - j4, ry + rh / 2, rx + j1, ry);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(rx, ry + j2);
+    ctx.lineTo(rx + rw + j1, ry);
+    ctx.lineTo(rx + rw - j2, ry + rh);
+    ctx.lineTo(rx + j4, ry + rh - j1);
+    ctx.closePath();
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  drawHandDrawnCircle(ctx, el) {
+    const r = Math.abs(el.radius);
+    if (r < 2) return;
+
+    ctx.save();
+    ctx.strokeStyle = el.color;
+    ctx.lineWidth = el.strokeWidth || 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const s = el.seed || (el.seed = Math.floor(Math.random() * 1000));
+    const ox = ((s % 5) - 2) * 0.45;
+    const oy = (((s * 3) % 5) - 2) * 0.45;
+
+    ctx.beginPath();
+    ctx.arc(el.cx, el.cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.arc(el.cx + ox, el.cy + oy, r + 0.5, 0.2, Math.PI * 2 + 0.35);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  drawHandDrawnArrow(ctx, el) {
+    ctx.save();
+    ctx.strokeStyle = el.color;
+    ctx.fillStyle = el.color;
+    ctx.lineWidth = el.strokeWidth || 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    const x1 = el.x1, y1 = el.y1, x2 = el.x2, y2 = el.y2;
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 3) {
+      ctx.restore();
+      return;
+    }
+
+    const mx = (x1 + x2) / 2 - dy * 0.04;
+    const my = (y1 + y2) / 2 + dx * 0.04;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(mx, my, x2, y2);
+    ctx.stroke();
+
+    const angle = Math.atan2(y2 - my, x2 - mx);
+    const headLen = Math.max(12, (el.strokeWidth || 2.5) * 4.5);
+    const a1 = angle - 0.48;
+    const a2 = angle + 0.48;
+
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(a1), y2 - headLen * Math.sin(a1));
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(a2), y2 - headLen * Math.sin(a2));
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  drawText(ctx, el) {
+    ctx.save();
+    ctx.font = (el.fontSize || 16) + 'px "JetBrains Mono", "Inter", sans-serif';
+    ctx.fillStyle = el.color;
+    ctx.textBaseline = "top";
+    const lines = (el.text || "").split("\n");
+    lines.forEach((line, idx) => {
+      ctx.fillText(line, el.x, el.y + idx * ((el.fontSize || 16) * 1.35));
+    });
+    ctx.restore();
+  }
+
+  drawAnchorIndicator(ctx, pt, isHovered = false) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, isHovered ? 7 : 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = isHovered ? "#10B981" : "rgba(16, 185, 129, 0.45)";
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  toDataURL(format = "image/png", bgColor = "transparent") {
+    const off = document.createElement("canvas");
+    const dpr = this.dpr || 1;
+    const w = this.canvas.width / dpr;
+    const h = this.canvas.height / dpr;
+    off.width = Math.floor(w * dpr);
+    off.height = Math.floor(h * dpr);
+    const octx = off.getContext("2d");
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (bgColor && bgColor !== "transparent") {
+      octx.fillStyle = bgColor;
+      octx.fillRect(0, 0, w, h);
+    }
+    this.renderElements(octx, false);
+    return off.toDataURL(format);
+  }
+}
+
+// Global Whiteboard Engine instances
+let composerWhiteboard = null;
+let studioWhiteboard = null;
+let activeWhiteboardNoteId = null;
+
+function initWhiteboards() {
+  const composerCanvas = document.getElementById("composer-sketch-canvas");
+  const composerToolbar = document.getElementById("composer-sketch-toolbar");
+  if (composerCanvas && composerToolbar && !composerWhiteboard) {
+    composerWhiteboard = new WhiteboardEngine(composerCanvas, composerToolbar, {
+      onChange: (elements) => {
+        if (elements.length > 0) {
+          localStorage.setItem("wb_draft_sketch", JSON.stringify(elements));
+        } else {
+          localStorage.removeItem("wb_draft_sketch");
+        }
+      }
+    });
+  }
+
+  const studioCanvas = document.getElementById("studio-sketch-canvas");
+  const studioToolbar = document.getElementById("studio-sketch-toolbar");
+  if (studioCanvas && studioToolbar && !studioWhiteboard) {
+    studioWhiteboard = new WhiteboardEngine(studioCanvas, studioToolbar);
+  }
+}
+
+function openDedicatedWhiteboard(noteId = null) {
+  initWhiteboards();
+  activeWhiteboardNoteId = noteId;
+  const modal = document.getElementById("dedicated-whiteboard-modal");
+  const titleInput = document.getElementById("whiteboard-modal-title");
+  if (!modal) return;
+
+  modal.style.display = "flex";
+  if (studioWhiteboard) {
+    studioWhiteboard.resizeCanvas();
+  }
+
+  if (noteId === "composer-draft") {
+    if (titleInput) titleInput.value = document.getElementById("note-title")?.value || "";
+    if (studioWhiteboard && composerWhiteboard) {
+      studioWhiteboard.importElements(composerWhiteboard.elements);
+    }
+  } else if (noteId) {
+    const notes = getLocalNotes();
+    const note = notes.find(n => n.id === noteId);
+    if (note) {
+      if (titleInput) titleInput.value = note.title || "";
+      if (studioWhiteboard && note.sketch) {
+        try {
+          const sk = typeof note.sketch === "string" && note.sketch.startsWith("{") ? JSON.parse(note.sketch) : null;
+          if (sk && Array.isArray(sk.elements)) {
+            studioWhiteboard.importElements(sk.elements);
+          } else {
+            studioWhiteboard.clear();
+          }
+        } catch (e) {
+          studioWhiteboard.clear();
+        }
+      } else if (studioWhiteboard) {
+        studioWhiteboard.clear();
+      }
+    }
+  } else {
+    if (titleInput) titleInput.value = "";
+    if (studioWhiteboard) studioWhiteboard.clear();
+  }
+
+  if (titleInput) titleInput.focus();
+}
+
+function closeDedicatedWhiteboard() {
+  const modal = document.getElementById("dedicated-whiteboard-modal");
+  if (modal) modal.style.display = "none";
+  activeWhiteboardNoteId = null;
+}
+
+// Wire Whiteboard Header & Modal Buttons
+document.getElementById("new-whiteboard-header-btn")?.addEventListener("click", () => {
+  openDedicatedWhiteboard(null);
+});
+
+document.getElementById("composer-sketch-toggle-btn")?.addEventListener("click", () => {
+  initWhiteboards();
+  const container = document.getElementById("composer-sketch-container");
+  const toggleBtn = document.getElementById("composer-sketch-toggle-btn");
+  if (!container) return;
+  const isHidden = container.style.display === "none";
+  container.style.display = isHidden ? "block" : "none";
+  if (toggleBtn) toggleBtn.classList.toggle("active", isHidden);
+  if (isHidden && composerWhiteboard) {
+    setTimeout(() => composerWhiteboard?.resizeCanvas(), 50);
+  }
+});
+
+document.getElementById("composer-sketch-expand-btn")?.addEventListener("click", () => {
+  openDedicatedWhiteboard("composer-draft");
+});
+
+document.getElementById("whiteboard-modal-close-btn")?.addEventListener("click", closeDedicatedWhiteboard);
+
+document.getElementById("whiteboard-export-png-btn")?.addEventListener("click", () => {
+  if (!studioWhiteboard) return;
+  const title = document.getElementById("whiteboard-modal-title")?.value?.trim() || "whiteboard-diagram";
+  const dataUrl = studioWhiteboard.toDataURL("image/png", "#FFFFFF");
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = (title.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "whiteboard") + ".png";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  showToast("Whiteboard exported as PNG image ✓", "success");
+});
+
+document.getElementById("whiteboard-save-exit-btn")?.addEventListener("click", async () => {
+  if (!studioWhiteboard) return;
+  const titleVal = document.getElementById("whiteboard-modal-title")?.value?.trim() || "Whiteboard Diagram";
+  const sketchPayload = JSON.stringify({
+    elements: studioWhiteboard.elements,
+    dataUrl: studioWhiteboard.toDataURL()
+  });
+
+  if (activeWhiteboardNoteId === "composer-draft") {
+    if (composerWhiteboard) {
+      composerWhiteboard.importElements(studioWhiteboard.elements);
+    }
+    const noteTitleInput = document.getElementById("note-title");
+    if (noteTitleInput) noteTitleInput.value = titleVal;
+    const compContainer = document.getElementById("composer-sketch-container");
+    if (compContainer) compContainer.style.display = "block";
+    const compBtn = document.getElementById("composer-sketch-toggle-btn");
+    if (compBtn) compBtn.classList.add("active");
+    closeDedicatedWhiteboard();
+    showToast("Whiteboard sketch updated in draft ✓", "success");
+    return;
+  }
+
+  if (activeWhiteboardNoteId) {
+    const notes = getLocalNotes();
+    const note = notes.find(n => n.id === activeWhiteboardNoteId);
+    if (note) {
+      note.title = titleVal;
+      note.sketch = sketchPayload;
+      note.updated_at = new Date().toISOString();
+      note.synced = false;
+      saveLocalNotes(notes);
+      renderNotes(document.getElementById("note-search")?.value || "");
+      updateSyncIndicator();
+      closeDedicatedWhiteboard();
+      showToast("Whiteboard note updated ✓", "success");
+      if (navigator.onLine) {
+        await trySyncNote(note);
+        saveLocalNotes(notes);
+        renderNotes(document.getElementById("note-search")?.value || "");
+      }
+    }
+  } else {
+    const user = getCurrentUser();
+    const now = new Date().toISOString();
+    const note = {
+      id: "local-" + Date.now() + "-" + Math.random().toString(36).slice(2),
+      title: titleVal,
+      text: "",
+      notebook_id: activeNotebookId !== "all" ? Number(activeNotebookId) : null,
+      tags: "whiteboard",
+      color: selectedNoteColor || "",
+      pinned: false,
+      sketch: sketchPayload,
+      author: user ? user.name : "You",
+      created_at: now,
+      updated_at: now,
+      synced: false
+    };
+    const notes = getLocalNotes();
+    notes.push(note);
+    saveLocalNotes(notes);
+    renderNotes(document.getElementById("note-search")?.value || "");
+    updateSyncIndicator();
+    closeDedicatedWhiteboard();
+    showToast("Whiteboard note created ✓", "success");
+    if (navigator.onLine) {
+      const synced = await trySyncNote(note);
+      if (synced) {
+        saveLocalNotes(notes);
+        renderNotes(document.getElementById("note-search")?.value || "");
+      }
+    }
+  }
+});
+
+window.addEventListener("resize", () => {
+  if (composerWhiteboard && document.getElementById("composer-sketch-container")?.style.display !== "none") {
+    composerWhiteboard.resizeCanvas();
+  }
+  if (studioWhiteboard && document.getElementById("dedicated-whiteboard-modal")?.style.display !== "none") {
+    studioWhiteboard.resizeCanvas();
+  }
+});
+
 function renderNotes(filterText = "") {
   let notes = getLocalNotes();
   const searchInput = document.getElementById("note-search");
@@ -1270,6 +2253,22 @@ function renderNotes(filterText = "") {
       `;
     }
 
+    // Embedded Sketch Thumbnail Block
+    let sketchBlockHtml = "";
+    if (n.sketch) {
+      try {
+        const skData = typeof n.sketch === "string" && n.sketch.startsWith("{") ? JSON.parse(n.sketch) : { dataUrl: n.sketch };
+        if (skData && skData.dataUrl) {
+          sketchBlockHtml = `
+            <div class="note-sketch-block" data-note-id="${n.id}" title="Click to view & edit whiteboard studio">
+              <img src="${skData.dataUrl}" alt="Whiteboard Diagram" class="note-sketch-img" loading="lazy" />
+              <span class="note-sketch-badge-pill">🎨 Whiteboard Canvas</span>
+            </div>
+          `;
+        }
+      } catch (err) {}
+    }
+
     li.innerHTML = `
       <div class="note-header-row">
         <div class="note-title-wrap">
@@ -1285,6 +2284,8 @@ function renderNotes(filterText = "") {
       </div>
 
       ${tagsHtml ? `<div class="note-tags-row">${tagsHtml}</div>` : ""}
+
+      ${sketchBlockHtml}
 
       <div class="note-body" data-note-id="${n.id}">
         ${renderMarkdown(n.text, n.id)}
@@ -1327,6 +2328,11 @@ function renderNotes(filterText = "") {
   });
 
   // Wire event handlers
+  
+  list.querySelectorAll(".note-sketch-block").forEach((blk) => {
+    blk.addEventListener("click", () => openDedicatedWhiteboard(blk.dataset.noteId));
+  });
+
   list.querySelectorAll(".edit-btn").forEach((b) => b.addEventListener("click", () => openEditNoteModal(b.dataset.id)));
   list.querySelectorAll(".delete-btn").forEach((b) => b.addEventListener("click", () => openDeleteConfirmModal(b.dataset.id)));
   list.querySelectorAll(".pin-btn").forEach((b) => b.addEventListener("click", () => togglePin(b.dataset.id)));
@@ -1530,7 +2536,8 @@ async function trySyncNote(note) {
         notebook_id: note.notebook_id || null,
         tags: note.tags || "",
         color: note.color || "",
-        pinned: !!note.pinned
+        pinned: !!note.pinned,
+        sketch: note.sketch || ""
       })
     });
     if (res.ok) {
@@ -1582,14 +2589,24 @@ document.getElementById("note-form")?.addEventListener("submit", async (e) => {
   const tagsVal = document.getElementById("note-tags-input")?.value || "";
   const now = new Date().toISOString();
   const user = getCurrentUser();
+  let sketchDataStr = "";
+  if (composerWhiteboard && composerWhiteboard.elements.length > 0) {
+    sketchDataStr = JSON.stringify({
+      elements: composerWhiteboard.elements,
+      dataUrl: composerWhiteboard.toDataURL()
+    });
+  }
+
+  const finalTitle = title.trim() || (sketchDataStr ? "Whiteboard Sketch" : "Untitled Note");
   const note = {
     id: "local-" + Date.now() + "-" + Math.random().toString(36).slice(2),
-    title,
+    title: finalTitle,
     text,
     notebook_id: assignedNbId,
     tags: tagsVal,
     color: selectedNoteColor || "",
     pinned: false,
+    sketch: sketchDataStr,
     author: user ? user.name : "You",
     created_at: now,
     updated_at: now,
@@ -1602,6 +2619,15 @@ document.getElementById("note-form")?.addEventListener("submit", async (e) => {
   renderNotes(document.getElementById("note-search")?.value || "");
   updateSyncIndicator();
   e.target.reset();
+
+  if (composerWhiteboard) {
+    composerWhiteboard.clear();
+    const compContainer = document.getElementById("composer-sketch-container");
+    if (compContainer) compContainer.style.display = "none";
+    const compToggle = document.getElementById("composer-sketch-toggle-btn");
+    if (compToggle) compToggle.classList.remove("active");
+    localStorage.removeItem("wb_draft_sketch");
+  }
 
   if (navigator.onLine) {
     const synced = await trySyncNote(note);
@@ -1655,6 +2681,7 @@ async function pullSharedNotes() {
           existing.tags = sn.tags;
           existing.color = sn.color;
           existing.pinned = !!sn.pinned;
+          existing.sketch = sn.sketch || "";
           existing.synced = true;
           updated = true;
         }
@@ -1670,6 +2697,7 @@ async function pullSharedNotes() {
           tags: sn.tags,
           color: sn.color,
           pinned: !!sn.pinned,
+          sketch: sn.sketch || "",
           synced: true
         });
         updated = true;
@@ -2088,6 +3116,7 @@ document.getElementById("note-form")?.addEventListener("submit", () => {
   localStorage.removeItem("wb_draft_title");
   localStorage.removeItem("wb_draft_text");
   localStorage.removeItem("wb_draft_tags");
+  localStorage.removeItem("wb_draft_sketch");
   localStorage.removeItem("wb_active_draft_id");
   const indicator = document.getElementById("note-autosave-indicator");
   if (indicator) {

@@ -400,8 +400,8 @@ app.get("/api/notes", requireAuth, requireGroupMember, (req, res) => {
 });
 
 app.post("/api/notes", requireAuth, requireGroupMember, (req, res) => {
-  const { id, title, text, created_at, notebook_id, tags, color, pinned } = req.body;
-  if (text === undefined || text === null) return res.status(400).json({ error: "text is required" });
+  const { id, title, text, created_at, notebook_id, tags, color, pinned, sketch } = req.body;
+  const noteText = text !== undefined && text !== null ? text : "";
   const now = new Date().toISOString();
 
   const existing = get(
@@ -415,7 +415,7 @@ app.post("/api/notes", requireAuth, requireGroupMember, (req, res) => {
       [existing.client_id, req.groupId]
     );
     const shouldSnapshot = !lastVersion || (new Date(now) - new Date(lastVersion.created_at) > 90000);
-    if (shouldSnapshot && (existing.text !== text || existing.title !== title)) {
+    if (shouldSnapshot && (existing.text !== noteText || existing.title !== title)) {
       run(
         "INSERT INTO note_versions (note_id, group_id, title, text, tags, notebook_id, edited_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [existing.client_id, req.groupId, existing.title, existing.text, existing.tags || "", existing.notebook_id || null, req.user.name, now]
@@ -423,14 +423,15 @@ app.post("/api/notes", requireAuth, requireGroupMember, (req, res) => {
     }
 
     run(
-      "UPDATE notes SET title = ?, text = ?, notebook_id = ?, tags = ?, color = ?, pinned = ?, updated_at = ? WHERE id = ?",
+      "UPDATE notes SET title = ?, text = ?, notebook_id = ?, tags = ?, color = ?, pinned = ?, sketch = ?, updated_at = ? WHERE id = ?",
       [
         title !== undefined ? title : existing.title,
-        text,
+        noteText,
         notebook_id !== undefined ? (notebook_id ? Number(notebook_id) : null) : existing.notebook_id,
         tags !== undefined ? tags : (existing.tags || ""),
         color !== undefined ? color : (existing.color || ""),
         pinned !== undefined ? (pinned ? 1 : 0) : existing.pinned,
+        sketch !== undefined ? sketch : (existing.sketch || ""),
         now,
         existing.id
       ]
@@ -440,33 +441,34 @@ app.post("/api/notes", requireAuth, requireGroupMember, (req, res) => {
 
   const clientId = id || ("note-" + Date.now() + "-" + Math.random().toString(36).substr(2, 6));
   const newId = run(
-    "INSERT INTO notes (group_id, client_id, title, text, author, created_at, updated_at, notebook_id, tags, color, pinned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO notes (group_id, client_id, title, text, author, created_at, updated_at, notebook_id, tags, color, pinned, sketch) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     [
       req.groupId,
       clientId,
-      title || "Untitled Note",
-      text,
+      title || (sketch ? "Whiteboard Sketch" : "Untitled Note"),
+      noteText,
       req.user.name,
       created_at || now,
       now,
       notebook_id ? Number(notebook_id) : null,
       tags || "",
       color || "",
-      pinned ? 1 : 0
+      pinned ? 1 : 0,
+      sketch || ""
     ]
   );
 
   // Initial version snapshot
   run(
     "INSERT INTO note_versions (note_id, group_id, title, text, tags, notebook_id, edited_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    [clientId, req.groupId, title || "Untitled Note", text, tags || "", notebook_id ? Number(notebook_id) : null, req.user.name, now]
+    [clientId, req.groupId, title || (sketch ? "Whiteboard Sketch" : "Untitled Note"), noteText, tags || "", notebook_id ? Number(notebook_id) : null, req.user.name, now]
   );
 
   res.status(201).json(get("SELECT * FROM notes WHERE id = ?", [newId]));
 });
 
 app.put("/api/notes/:client_id", requireAuth, requireGroupMember, (req, res) => {
-  const { title, text, notebook_id, tags, color, pinned } = req.body;
+  const { title, text, notebook_id, tags, color, pinned, sketch } = req.body;
   const note = get("SELECT * FROM notes WHERE client_id = ? AND group_id = ?", [req.params.client_id, req.groupId]);
   if (!note) return res.status(404).json({ error: "note not found" });
   const now = new Date().toISOString();
@@ -480,7 +482,7 @@ app.put("/api/notes/:client_id", requireAuth, requireGroupMember, (req, res) => 
   }
 
   run(
-    "UPDATE notes SET title = ?, text = ?, notebook_id = ?, tags = ?, color = ?, pinned = ?, updated_at = ? WHERE id = ?",
+    "UPDATE notes SET title = ?, text = ?, notebook_id = ?, tags = ?, color = ?, pinned = ?, sketch = ?, updated_at = ? WHERE id = ?",
     [
       title !== undefined ? title : note.title,
       text !== undefined ? text : note.text,
@@ -488,6 +490,7 @@ app.put("/api/notes/:client_id", requireAuth, requireGroupMember, (req, res) => 
       tags !== undefined ? tags : note.tags,
       color !== undefined ? color : note.color,
       pinned !== undefined ? (pinned ? 1 : 0) : note.pinned,
+      sketch !== undefined ? sketch : (note.sketch || ""),
       now,
       note.id
     ]
