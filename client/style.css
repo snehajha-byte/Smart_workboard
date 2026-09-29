@@ -1109,6 +1109,26 @@ button:active {
   overflow-y: auto;
   min-width: 0;
   width: 100%;
+  position: relative;
+  background-color: #EBF3F9;
+  background-image: 
+    linear-gradient(rgba(235, 243, 249, 0.88), rgba(235, 243, 249, 0.88)),
+    url('assets/office-flatlay-bg.jpg');
+  background-size: cover;
+  background-position: center top;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+}
+
+body[data-theme="dark"] .main-viewport {
+  background-color: #0B0F19;
+  background-image: 
+    linear-gradient(rgba(11, 15, 25, 0.92), rgba(11, 15, 25, 0.92)),
+    url('assets/office-flatlay-bg.jpg');
+  background-size: cover;
+  background-position: center top;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 .tab-content-wrap {
